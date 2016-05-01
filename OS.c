@@ -5,50 +5,46 @@
  */
 
 #include "OS.h"
-#include "PCB.h"
-#include "FIFOq.h"
 
 #define WRITE_TO_FILE false
 
-/*extern global declarations for system stack*/
-unsigned long SysStack[SYSSIZE];
-int SysPointer;
+
+
+/*global declarations for system stack*/
+static unsigned long SysStack[SYSSIZE];
+static int SysPointer;
+
 
 /*interrupt lines*/
-bool INTERRUPT_timer = false;
-mutex MUTEX_timer;
-cond COND_timer;
+static bool INTERRUPT_timer;
+static mutex MUTEX_timer;
+static io_thread IO[IO_NUMBER];
+
+//cond COND_timer;
 //array of INTERRUPT_iocomplete
-mutex MUTEX_io;
-cond COND_io;
+//mutex MUTEX_io;
+//cond COND_io;
 
 /*OS only declarations for current and idle processes*/
-PCB_p current;
-PCB_p idl;
+static PCB_p current;
+static PCB_p idl;
+
+
 
 /* Launches the OS. Sets default values, initializes idle process and calls the
  * mainLoopOS to simulate running the cpu. Afterwards it cleans up reports
  * any errors encountered.
  */
-void main() {
+int main(void) {
     
     if(WRITE_TO_FILE) {
         freopen("scheduleTrace.txt", "w", stdout);
     }
     
-    srand(time(NULL)); // seed random with current time
     int base_error = 0;
-    SysPointer = 0; //points at next unassigned stack item; 0 is empty
+
+    base_error += bootOS();
     
-    idl = PCB_construct_init(&base_error);
-    idl->pid = ULONG_MAX;
-    idl->priority = LOWEST_PRIORITY;
-    idl->sw = ULONG_MAX;
-    
-    current = idl; //current's default state if no ready PCBs to run
-    current->state = running;
-    
-    //begin system loop and print exit error messages
     mainLoopOS(&base_error);
             
     stackCleanup();
@@ -61,6 +57,36 @@ void main() {
         if (OUTPUT) printf("\n%d processes have been created so system has exited\n", MAX_PROCESSES);
     }
 
+    return base_error;
+
+}
+
+//initializes values and returns error
+int bootOS(int* error) {
+    int t;
+    
+    srand(time(NULL)); // seed random with current time
+    
+    SysPointer = 0; //points at next unassigned stack item; 0 is empty
+    
+    idl = PCB_construct_init(error);
+    idl->pid = ULONG_MAX;
+    idl->priority = LOWEST_PRIORITY;
+    idl->sw = ULONG_MAX;
+    
+    current = idl; //current's default state if no ready PCBs to run
+    current->state = running;
+
+    INTERRUPT_timer = false;
+    pthread_mutex_init(&MUTEX_timer, NULL);
+    for (t = 0; t < IO_NUMBER; t++) {
+        IO[t] = (io_thread)malloc(sizeof(struct io_thread_type));
+        pthread_mutex_init(&(IO[t]->MUTEX_io), NULL);
+        IO[t]->waitingQ = FIFOq_construct(error);
+    }
+        
+    
+    return *error;
 }
 
 /* Main loop for the operating system. Initializes queues and PC/SW values.
@@ -74,12 +100,11 @@ int mainLoopOS(int *error) {
 
     int t;
     thread timer_thread;
-    thread io_thread[IO_NUMBER];
     
     unsigned long timer_var = 0;    
     pthread_create(&timer_thread, NULL, timer, NULL);
     for (t = 0; t < IO_NUMBER; t++)
-        pthread_create(&(io_thread[t]), NULL, io, (void*)t);
+        pthread_create(&(IO[t]->THREAD_io), NULL, io, (void*)t);
     
     //these are the items that need to pop off the stack
     unsigned long pc = current->pc; //we used a long to match the PCB value for PC
@@ -107,7 +132,7 @@ int mainLoopOS(int *error) {
     /**************************************************************************/
     /*************************** MAIN LOOP OS *********************************/
     /**************************************************************************/
-    while(true) {
+    do {
         
         exit = createPCBs(createQ, error);
                 
@@ -149,13 +174,13 @@ int mainLoopOS(int *error) {
             }
             
             /*** IO CHECK ***/
-            if (pthread_mutex_trylock(&MUTEX_io)) {
-                pthread_mutex_lock(&MUTEX_io);
-                //for loop that goes through all io_complete bools for each io device
-                    //if that interrupt line is true:
-                        //isr_iocomplete(index number representing io number)
-                pthread_mutex_unlock(&MUTEX_io);
-            }
+            for (t = 0; t < IO_NUMBER; t++)
+                if (pthread_mutex_trylock(&(IO[t]->MUTEX_io))) {
+                    pthread_mutex_lock(&(IO[t]->MUTEX_io));
+                    if (IO[t]->INTERRUPT_iocomplete)
+                        isr_iocomplete(t, error);
+                    pthread_mutex_unlock(&(IO[t]->MUTEX_io));
+                }
             
             /*** PCB TRAPS CHECK ***/
             for (t = 0; t < IO_NUMBER * IO_CALLS; t++)
@@ -168,9 +193,7 @@ int mainLoopOS(int *error) {
 
         }   
         
-        if (*error) break;
-        if (exit) break;
-    }
+    } while (!*error  && !exit);
     /**************************************************************************/
     /*************************** *********** **********************************/
     /**************************************************************************/    
@@ -178,6 +201,11 @@ int mainLoopOS(int *error) {
     queueCleanup(terminateQ, "terminateQ", error);
     queueCleanup(readyQ, "readyQ", error);
     queueCleanup(createQ, "createQ", error);
+    for (t = 0; t < IO_NUMBER; t++)
+        if (pthread_mutex_trylock(&(IO[t]->MUTEX_io))) {
+            
+        }
+            
 
     if (current != idl) {
         if (EXIT_STATUS_MESSAGE) {

@@ -38,24 +38,41 @@
 
 #define CPU_NULL_ERROR 71
 
-extern unsigned long SysStack[SYSSIZE];
-extern int SysPointer;
+//note on style: ALLCAPS_lowercase is either a MUTEX_ variable or the data
+//               protected by the MUTEX_
 
-int     mainLoopOS  (int *error);
-void*    timer       (void*);
-void*    io        (void*);
-void    trap_terminate();
-void trap_iohandler(int t, int* error);
-void isr_timer(FIFOq_p createQ, FIFOq_p readyQ, int* error);
-void isr_iocomplete(int io, int* error);
-void scheduler(const int INTERRUPT, FIFOq_p createQ, FIFOq_p readyQ, int* error);
-void dispatcher(FIFOq_p readyQ, int* error);
-int sysStackPush(void*);
-int sysStackPop(void*);
-void    queueCleanup(FIFOq_p, char*, int*);
-void    stackCleanup();
-int    createPCBs  	(FIFOq_p createQ, int *error);
-void    run         (unsigned long *pc, int *error);
+struct io_thread_type {
+    thread THREAD_io;
+    mutex MUTEX_io;
+    bool INTERRUPT_iocomplete;
+    FIFOq_p waitingQ;
 
+    /*struct {
+        bool interrupt_io_complete;
+        FIFOq_p waitingQ_IO;
+    } waitingIO[ioThreadCount];*/
+};
+
+typedef struct io_thread_type* io_thread;
+
+//extern unsigned long SsyStack[SYSSIZE];
+//extern int SysPointer;
+
+int      bootOS          ();
+int      mainLoopOS      (int *error);
+void*    timer           (void*);
+void*    io              (void*);
+void     trap_terminate  ();
+void     trap_iohandler  (int t, int* error);
+void     isr_timer       (FIFOq_p createQ, FIFOq_p readyQ, int* error);
+void     isr_iocomplete  (int io, int* error);
+void     scheduler       (const int INTERRUPT, FIFOq_p createQ, FIFOq_p readyQ, int* error);
+void     dispatcher      (FIFOq_p readyQ, int* error);
+int      sysStackPush    (void*);
+int      sysStackPop     (void*);
+void     queueCleanup    (FIFOq_p, char*, int*);
+void     stackCleanup    ();
+int      createPCBs  	(FIFOq_p createQ, int *error);
+//static void     run             (unsigned long *pc, int *error);
 
 #endif

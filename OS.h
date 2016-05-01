@@ -12,8 +12,13 @@
 #include <string.h>
 #include <limits.h>
 #include <time.h>
+#include <pthread.h>
 #include "FIFOq.h"
 #include "PCB.h"
+
+#define thread pthread_t
+#define mutex pthread_mutex_t
+#define cond pthread_cond_t
 
 #define DEBUG false
 #define EXIT_STATUS_MESSAGE false
@@ -21,8 +26,10 @@
 #define START_IDLE false
 #define NO_INTERRUPT 9999
 #define INTERRUPT_TIMER 5555
+#define INTERRUPT_TERMINATE 8888
 #define INTERRUPT_IO 4444
 
+#define TIME_QUANTUM 300
 #define MAX_PROCESSES 30
 #define SYSSIZE 256
 #define MAX_NEW_PCB 5
@@ -34,14 +41,21 @@
 extern unsigned long SysStack[SYSSIZE];
 extern int SysPointer;
 
-void    startOS    ();
 int     mainLoopOS  (int *error);
+void*    timer       (void*);
+void*    io        (void*);
+void    trap_terminate();
+void trap_iohandler(int t, int* error);
+void isr_timer(FIFOq_p createQ, FIFOq_p readyQ, int* error);
+void isr_iocomplete(int io, int* error);
+void scheduler(const int INTERRUPT, FIFOq_p createQ, FIFOq_p readyQ, int* error);
+void dispatcher(FIFOq_p readyQ, int* error);
+int sysStackPush(void*);
+int sysStackPop(void*);
 void    queueCleanup(FIFOq_p, char*, int*);
 void    stackCleanup();
 int    createPCBs  	(FIFOq_p createQ, int *error);
 void    run         (unsigned long *pc, int *error);
-void scheduler(const int INTERRUPT, FIFOq_p createQ, FIFOq_p readyQ, int* error);
-void dispatcher(FIFOq_p readyQ, int* error);
-void isrTimer(FIFOq_p createQ, FIFOq_p readyQ, int* error);
+
 
 #endif

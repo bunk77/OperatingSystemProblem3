@@ -5,7 +5,7 @@ Bun
 	timer thread
 
 Chris
-	create new types of wrapper structs (PCB and CPU) | (struct waitingQ)
+	create new types of wrapper structs (PCB and CPU) & (struct waitingQ)
 	IO thread
 
 Mark
@@ -48,7 +48,7 @@ Changes:
 
 	CPU redesigned to simulate 1 PC increment per loop
 		before CPU starts, start IO and timer threads
-		needs to have copies of PCB's non-constant factors
+		needs to have copies of PCB's non-constant factors"
 	CPU loop (Main_OS_Loop or something): - Mark
 		1 PC++
 		2 check if PC == MAX_PC
@@ -69,6 +69,7 @@ Changes:
 		restores to (PCB or CPU) contents of the stack
 
 	trap_terminate - Bun
+		pops CPU info from stack and copies to current PCB
 		changesa current running process state to terminated
 		puts that process in a terminate readyQ
 		calls scheduler->dispatch new running process	

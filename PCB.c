@@ -12,7 +12,7 @@
 #include "PCB.h"
 
 //struct and error defines originally here
-char *STATE[] = {"created", "ready", "running", "interrupted", "waiting", "halted"};
+char *STATE[] = {"created", "ready", "running", "interrupted", "waiting", "terminated"};
 
 /**
  * Returns a pcb pointer to heap allocation.
@@ -67,13 +67,21 @@ int PCB_init (PCB_p this) {
     firstCall = 0;
   }
   int error = (this == NULL) * PCB_NULL_ERROR;
-  
+  int t;
   if(!error) {
     this->pid = ++pidCounter;
-    this->pc = DEFAULT_PC;
     this->priority = rand() & LOWEST_PRIORITY;
     this->state = DEFAULT_STATE;
+    this->timeCreate = clock();
+    this->timeTerminate = 0;
+
+    this->pc = DEFAULT_PC;
+    this->MAX_PC = rand() % (MAX_PC_RANGE+1) + MAX_PC_MIN;
     this->sw = DEFAULT_SW;
+    this->term_count = 0;
+    this->TERMINATE = rand() % TERM_RANGE;
+    for (t = 0; t < IO_NUMBER * IO_CALLS; t++)
+        this->IO_TRAPS[(int)(t/IO_CALLS)][t%IO_CALLS] = rand() % this->MAX_PC;
   }
   return error;
 }
@@ -122,7 +130,7 @@ int PCB_setState (PCB_p this, enum state_type state) {
   if(this == NULL) {
     error |= PCB_NULL_ERROR;
   }
-  if(state < created || state > halted) {
+  if(state < created || state > terminated) {
     error |= PCB_OTHER_ERROR;
   }
   if(!error) {

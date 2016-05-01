@@ -14,6 +14,14 @@
 unsigned long SysStack[SYSSIZE];
 int SysPointer;
 
+/*interrupt lines*/
+bool INTERRUPT_timer = false;
+mutex MUTEX_timer;
+cond COND_timer;
+//array of INTERRUPT_iocomplete
+mutex MUTEX_io;
+cond COND_io;
+
 /*OS only declarations for current and idle processes*/
 PCB_p current;
 PCB_p idl;
@@ -22,7 +30,7 @@ PCB_p idl;
  * mainLoopOS to simulate running the cpu. Afterwards it cleans up reports
  * any errors encountered.
  */
-void startOS() {
+void main() {
     
     if(WRITE_TO_FILE) {
         freopen("scheduleTrace.txt", "w", stdout);
@@ -36,9 +44,9 @@ void startOS() {
     idl->pid = ULONG_MAX;
     idl->priority = LOWEST_PRIORITY;
     idl->sw = ULONG_MAX;
-    idl->state = running;
     
     current = idl; //current's default state if no ready PCBs to run
+    current->state = running;
     
     //begin system loop and print exit error messages
     mainLoopOS(&base_error);
@@ -64,12 +72,30 @@ void startOS() {
  */
 int mainLoopOS(int *error) {
 
-    unsigned long PC = 0; //we used a long to match the PCB value for PC
-    unsigned long SW = 0;
+    int t;
+    thread timer_thread;
+    thread io_thread[IO_NUMBER];
+    
+    unsigned long timer_var = 0;    
+    pthread_create(&timer_thread, NULL, timer, NULL);
+    for (t = 0; t < IO_NUMBER; t++)
+        pthread_create(&(io_thread[t]), NULL, io, (void*)t);
+    
+    //these are the items that need to pop off the stack
+    unsigned long pc = current->pc; //we used a long to match the PCB value for PC
+    unsigned long MAX_PC = current->MAX_PC;
+    unsigned long sw = current->sw;
+    unsigned long term_count = current->term_count;
+    unsigned long TERMINATE = current->TERMINATE;
+    unsigned long IO_TRAPS[IO_NUMBER][IO_CALLS];
+    for (t = 0; t < IO_NUMBER * IO_CALLS; t++)
+       IO_TRAPS[(int)(t/IO_CALLS)][t%IO_CALLS] = current->IO_TRAPS[(int)(t/IO_CALLS)][t%IO_CALLS];
+ 
 //    unsigned long REGFILE[32] = {0};
     
     FIFOq_p createQ = FIFOq_construct(error);
     FIFOq_p readyQ = FIFOq_construct(error);
+    FIFOq_p terminateQ = FIFOq_construct(error);
     
     int exit = 0;
     
@@ -90,20 +116,55 @@ int mainLoopOS(int *error) {
             printf("ERROR current process unassigned! %d", *error);
 
         } else {
-
-            run(&PC, error);
-
-            if (DEBUG) printf("\t\tStack going to push mainOS: %d\n", SysPointer);      
-            SysStack[SysPointer++] = PC;
-            SysStack[SysPointer++] = SW;
-
-            isrTimer(createQ, readyQ, error);
             
-            if (DEBUG) printf("\t\tStack going to pop mainOS: %d\n", SysPointer);
-            SW = SysStack[--SysPointer];
-            PC = SysStack[--SysPointer];
+            /*** INCREMENT PC ***/
+            pc++;
+            
+            /*** TERMINATE CHECK ***/
+            if (pc == MAX_PC) {
+                pc = 0;
+                term_count++;
+                if (term_count == TERMINATE) {
+                    sysStackPush(/*CPU actually*/idl);
+                    trap_terminate();
+                    sysStackPop(/*CPU actually*/idl);
+                }
+            }
+            
+            /*** TIMER CHECK ***/
+            if (pthread_mutex_trylock(&MUTEX_timer)) {
+                pthread_mutex_lock(&MUTEX_timer);
+                bool context_switch = false;
+                if (INTERRUPT_timer) {
+                    INTERRUPT_timer = false;
+                    context_switch = true;
+                }
+                pthread_mutex_unlock(&MUTEX_timer);
+                if (context_switch) {
+                    sysStackPush(/*CPU actually*/idl);
+                    isr_timer(createQ, readyQ, error);
+                    sysStackPop(/*CPU actually*/idl);
+                }
+                
+            }
+            
+            /*** IO CHECK ***/
+            if (pthread_mutex_trylock(&MUTEX_io)) {
+                pthread_mutex_lock(&MUTEX_io);
+                //for loop that goes through all io_complete bools for each io device
+                    //if that interrupt line is true:
+                        //isr_iocomplete(index number representing io number)
+                pthread_mutex_unlock(&MUTEX_io);
+            }
+            
+            /*** PCB TRAPS CHECK ***/
+            for (t = 0; t < IO_NUMBER * IO_CALLS; t++)
+                if (pc = current->IO_TRAPS[(int)(t/IO_CALLS)][t%IO_CALLS]) {
+                    sysStackPush(/*CPU actually*/idl);
+                    trap_iohandler(t, error);
+                    sysStackPop(/*CPU actually*/idl);
+                }
 
-            if (DEBUG) printf("PC-----------------------------------PC: %lu\n", PC);
 
         }   
         
@@ -114,6 +175,7 @@ int mainLoopOS(int *error) {
     /*************************** *********** **********************************/
     /**************************************************************************/    
     
+    queueCleanup(terminateQ, "terminateQ", error);
     queueCleanup(readyQ, "readyQ", error);
     queueCleanup(createQ, "createQ", error);
 
@@ -135,28 +197,38 @@ int mainLoopOS(int *error) {
     return *error;
 }
 
-/* Simulates running cycles by incrementing the PC.
- */
-void run(unsigned long *PC, int *error) {
-    int r = rand() % (RUN_TIME_RANGE+1) + RUN_MIN_TIME;
-    *PC += r;
-    if (DEBUG) printf("incrementing PC by %d. PC is now %lu\n", r, *PC);
+void* timer(void* unused) {
+    
+}
+
+void* io(void* tid) {
+    //tid is int for thread number
+}
+
+void    trap_terminate() {
+    
+}
+void trap_iohandler(int t, int* error) {
+    
 }
 
 /* Interrupt service routine for the timer: interrupts the current PCB and saves
  * the CPU state to it before calling the scheduler.
  */
-void isrTimer(FIFOq_p createQ, FIFOq_p readyQ, int* error) {
+void isr_timer(FIFOq_p createQ, FIFOq_p readyQ, int* error) {
     //change the state from running to interrupted
     PCB_setState(current, interrupted);
     
     //assigns Current PCB PC and SW values to popped values of SystemStack
     if (DEBUG) printf("\t\tStack going to pop isrtimer: %d\n", SysPointer);
-    current->sw = SysStack[--SysPointer];
-    current->pc = SysStack[--SysPointer]; 
+    sysStackPop(current);
        
     //call Scheduler and pass timer interrupt parameter
     scheduler(INTERRUPT_TIMER, createQ, readyQ, error);
+}
+
+void isr_iocomplete(int io, int* error) {
+    
 }
 
 /* Always schedules any newly created PCBs into the ready queue, then checks
@@ -200,7 +272,11 @@ void scheduler(const int INTERRUPT, FIFOq_p createQ, FIFOq_p readyQ, int* error)
     switch (INTERRUPT) {
 
         case NO_INTERRUPT:
-            current->state = running;
+            if (current != idl && current->state != terminated) {
+                current->state = ready;
+                FIFOq_enqueuePCB(readyQ, current, error);
+            } else idl->state = waiting;
+            dispatcher(readyQ, error);
             break;
 
         case INTERRUPT_TIMER:
@@ -213,10 +289,11 @@ void scheduler(const int INTERRUPT, FIFOq_p createQ, FIFOq_p readyQ, int* error)
                 printf(">Switching to: %s\n", PCB_toString(readyQ->head->data, rdqstr, error));        
             }
             
-            current->state = ready;
-            if (current != idl)
+            
+            if (current != idl && current->state != terminated) {
+                current->state = ready;
                 FIFOq_enqueuePCB(readyQ, current, error);
-            else idl->state = waiting;
+            } else idl->state = waiting;
             dispatcher(readyQ, error);
 
             if (!(context_switch % 4)) {
@@ -233,10 +310,11 @@ void scheduler(const int INTERRUPT, FIFOq_p createQ, FIFOq_p readyQ, int* error)
             break;
 
         case INTERRUPT_IO:
-            current->state = halted;
-            //IO stuff
+            current->state = waiting;
+            //IO stuffb
             dispatcher(readyQ, error);
             break;
+             
     }
 
     //"housekeeping"
@@ -267,8 +345,7 @@ void dispatcher(FIFOq_p readyQ, int* error) {
     
     //copy currents's PC value to SystemStack
     if (DEBUG) printf("\t\tStack going to push dispatch: %d\n", SysPointer);
-    SysStack[SysPointer++] = current->pc;
-    SysStack[SysPointer++] = current->sw;
+    sysStackPush(current);
 
 }
 
@@ -277,6 +354,8 @@ void dispatcher(FIFOq_p readyQ, int* error) {
  * when 30 have been created.
  */
 int createPCBs(FIFOq_p createQ, int *error) {
+    if (rand() % TIME_QUANTUM)
+        return 0;
     int i;
     // random number of new processes between 0 and 5
     int r = rand() % (MAX_NEW_PCB+1);
@@ -308,6 +387,14 @@ int createPCBs(FIFOq_p createQ, int *error) {
     }
     if (DEBUG) printf("PCBs all created\n");
     return processes_created >= MAX_PROCESSES ? -1 : 0;
+}
+
+int sysStackPush(void* toStack) {
+    
+}
+
+int sysStackPop(void* fromStack) {
+    
 }
 
 /* Deallocates the queue data structures on the C simulator running this program

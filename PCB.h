@@ -14,6 +14,12 @@
 #define NUMREGS 16
 #define PRIORITIES_TOTAL 16
 #define LOWEST_PRIORITY (PRIORITIES_TOTAL - 1)
+#define IO_NUMBER 2
+#define IO_CALLS 4
+
+#define MAX_PC_MIN 100
+#define MAX_PC_RANGE 2000
+#define TERM_RANGE 10
 
 #define DEFAULT_STATE created
 #define DEFAULT_PC 0Lu
@@ -26,16 +32,24 @@
 #define PCB_TOSTRING_LEN 80
 
 typedef enum {false, true} bool;
-enum state_type {created = 0, ready, running, interrupted, waiting, halted};
+enum state_type {created = 0, ready, running, interrupted, waiting, terminated};
 
 struct PCB {
+  
   unsigned long pid;        // process ID #, a unique number
-  enum state_type state;    // process state (running, waiting, etc.)
   unsigned short priority;  // priorities 0=highest, LOWEST_PRIORITY=lowest
-
+  enum state_type state;    // process state (running, waiting, etc.)
+  unsigned long timeCreate;
+  unsigned long timeTerminate;
+  
   //save to PCB from system
   unsigned long pc;         // holds the current pc value when pre emptied
+  unsigned long MAX_PC;
   unsigned long sw;         // sw register for sw stuff
+  unsigned long term_count;
+  unsigned long TERMINATE;
+  unsigned long IO_TRAPS[IO_NUMBER][IO_CALLS];
+ 
 };
 
 

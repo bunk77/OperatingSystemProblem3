@@ -1,8 +1,5 @@
-problem2: main.o OS.o FIFOq.o PCB.o
-	gcc -o problem2 main.o OS.o FIFOq.o PCB.o
-
-main.o:
-	gcc -c main.c
+problem2: OS.o FIFOq.o PCB.o
+	gcc -o problem2 OS.o FIFOq.o PCB.o
 
 OS.o:
 	gcc -c OS.c

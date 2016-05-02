@@ -34,14 +34,23 @@
 typedef enum {false, true} bool;
 enum state_type {created = 0, ready, running, interrupted, waiting, terminated};
 
+
+struct CPU {
+  REG_p regs;
+};
+
 struct PCB {
-  
+  REG_p regs;
+  //separate from sysStack--don't push/pop  
   unsigned long pid;        // process ID #, a unique number
   unsigned short priority;  // priorities 0=highest, LOWEST_PRIORITY=lowest
   enum state_type state;    // process state (running, waiting, etc.)
   unsigned long timeCreate;
   unsigned long timeTerminate;
   
+};
+
+struct regfile {
   //save to PCB from system
   unsigned long pc;         // holds the current pc value when pre emptied
   unsigned long MAX_PC;
@@ -49,19 +58,20 @@ struct PCB {
   unsigned long term_count;
   unsigned long TERMINATE;
   unsigned long IO_TRAPS[IO_NUMBER][IO_CALLS];
- 
+    
 };
-
-
 
 
 //typedef struct pcb PCB;
 typedef struct PCB * PCB_p;
+typedef struct CPU * CPU_p;
+typedef struct regfile * REG_p;
 
 
 PCB_p 			PCB_construct 	(int *ptr_error);
 PCB_p 			PCB_construct_init 	(int *ptr_error);
 int 			PCB_destruct 	(PCB_p this); 
+REG_p REG_init(REG_p this, int *ptr_error);
 int 			PCB_init 		(PCB_p this);      
 int 			PCB_setPid 		(PCB_p this, unsigned long pid); 
 unsigned long 	PCB_getPid 		(PCB_p this, int *ptr_error);

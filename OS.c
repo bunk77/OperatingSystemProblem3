@@ -8,7 +8,7 @@
 
 #define WRITE_TO_FILE false
 
-
+static const unsigned long int REGNUM = sizeof(struct regfile)/sizeof(unsigned long);
 
 /*global declarations for system stack*/
 static unsigned long SysStack[SYSSIZE];
@@ -72,7 +72,7 @@ int bootOS(int* error) {
     idl = PCB_construct_init(error);
     idl->pid = ULONG_MAX;
     idl->priority = LOWEST_PRIORITY;
-    idl->sw = ULONG_MAX;
+    idl->regs->sw = ULONG_MAX;
     
     current = idl; //current's default state if no ready PCBs to run
     current->state = running;
@@ -106,17 +106,18 @@ int mainLoopOS(int *error) {
     for (t = 0; t < IO_NUMBER; t++)
         pthread_create(&(IO[t]->THREAD_io), NULL, io, (void*)t);
     
-    //these are the items that need to pop off the stack
-    unsigned long pc = current->pc; //we used a long to match the PCB value for PC
-    unsigned long MAX_PC = current->MAX_PC;
-    unsigned long sw = current->sw;
-    unsigned long term_count = current->term_count;
-    unsigned long TERMINATE = current->TERMINATE;
-    unsigned long IO_TRAPS[IO_NUMBER][IO_CALLS];
-    for (t = 0; t < IO_NUMBER * IO_CALLS; t++)
-       IO_TRAPS[(int)(t/IO_CALLS)][t%IO_CALLS] = current->IO_TRAPS[(int)(t/IO_CALLS)][t%IO_CALLS];
- 
-//    unsigned long REGFILE[32] = {0};
+    sysStackPush(current);
+    const CPU_p CPU = (CPU_p) malloc(sizeof(struct CPU));
+    sysStackPop(CPU->regs);
+        
+    const unsigned long * pc = &(CPU->regs->pc);
+    const unsigned long * MAX_PC = &(CPU->regs->MAX_PC);
+    const unsigned long * sw = &(CPU->regs->sw);
+    const unsigned long * term_count = &(CPU->regs->term_count);
+    const unsigned long * TERMINATE = &(CPU->regs->TERMINATE);
+    const unsigned long * pc = &(CPU->regs->pc);
+    const unsigned long ** IO_TRAPS = &(CPU->regs->IO_TRAPS);
+    //last const IO_TRAPS mayyyy not be correct
     
     FIFOq_p createQ = FIFOq_construct(error);
     FIFOq_p readyQ = FIFOq_construct(error);
@@ -136,10 +137,10 @@ int mainLoopOS(int *error) {
         
         exit = createPCBs(createQ, error);
                 
-        if (current == NULL) {
+        if (current == NULL || error == NULL) {
             *error += CPU_NULL_ERROR;
-            printf("ERROR current process unassigned! %d", *error);
-
+            printf("ERROR current process unassigned or error lost! %d", *error);
+            
         } else {
             
             /*** INCREMENT PC ***/
@@ -150,9 +151,9 @@ int mainLoopOS(int *error) {
                 pc = 0;
                 term_count++;
                 if (term_count == TERMINATE) {
-                    sysStackPush(/*CPU actually*/idl);
+                    sysStackPush(CPU->regs);
                     trap_terminate();
-                    sysStackPop(/*CPU actually*/idl);
+                    sysStackPop(CPU->regs);
                 }
             }
             
@@ -166,9 +167,9 @@ int mainLoopOS(int *error) {
                 }
                 pthread_mutex_unlock(&MUTEX_timer);
                 if (context_switch) {
-                    sysStackPush(/*CPU actually*/idl);
+                    sysStackPush(CPU->regs);
                     isr_timer(createQ, readyQ, error);
-                    sysStackPop(/*CPU actually*/idl);
+                    sysStackPop(CPU->regs);
                 }
                 
             }
@@ -184,10 +185,10 @@ int mainLoopOS(int *error) {
             
             /*** PCB TRAPS CHECK ***/
             for (t = 0; t < IO_NUMBER * IO_CALLS; t++)
-                if (pc = current->IO_TRAPS[(int)(t/IO_CALLS)][t%IO_CALLS]) {
-                    sysStackPush(/*CPU actually*/idl);
-                    trap_iohandler(t, error);
-                    sysStackPop(/*CPU actually*/idl);
+                if (pc == IO_TRAPS[t/IO_CALLS][t%IO_CALLS]) {
+                    sysStackPush(CPU->regs);
+                    trap_iohandler(t/IO_CALLS, error);
+                    sysStackPop(CPU->regs);
                 }
 
 
@@ -201,9 +202,14 @@ int mainLoopOS(int *error) {
     queueCleanup(terminateQ, "terminateQ", error);
     queueCleanup(readyQ, "readyQ", error);
     queueCleanup(createQ, "createQ", error);
+    char wQ[10] = "waitingQ_x";
     for (t = 0; t < IO_NUMBER; t++)
         if (pthread_mutex_trylock(&(IO[t]->MUTEX_io))) {
-            
+            wQ[9] = (char)t;
+            queueCleanup(IO[t]->waitingQ, wQ, error);
+            pthread_mutex_destroy(IO[t]->MUTEX_io);
+            free(IO[t]);
+            IO[t] = NULL;
         }
             
 
@@ -417,12 +423,36 @@ int createPCBs(FIFOq_p createQ, int *error) {
     return processes_created >= MAX_PROCESSES ? -1 : 0;
 }
 
-int sysStackPush(void* toStack) {
+int sysStackPush(REG_p fromRegs, int* error) {
+    int r;
     
+    for (r = 0; r < REGNUM; r++)
+        if (SysPointer >= SYSSIZE) {
+            *error += CPU_STACK_ERROR;
+            printf("ERROR: Sysstack exceeded\n");        
+        } else
+            SysStack[SysPointer++] = fromRegs[r];
+        //these are the items that need to pop off the stack
+//    unsigned long pc = current->regs->pc; //we used a long to match the PCB value for PC
+//    unsigned long MAX_PC = current->regs->MAX_PC;
+//    unsigned long sw = current->regs->sw;
+//    unsigned long term_count = current->regs->term_count;
+//    unsigned long TERMINATE = current->regs->TERMINATE;
+//    unsigned long IO_TRAPS[IO_NUMBER][IO_CALLS];
+//    for (t = 0; t < IO_NUMBER * IO_CALLS; t++)
+//       IO_TRAPS[(int)(t/IO_CALLS)][t%IO_CALLS] = current->IO_TRAPS[(int)(t/IO_CALLS)][t%IO_CALLS];
+
 }
 
-int sysStackPop(void* fromStack) {
-    
+int sysStackPop(REG_p toRegs, int* error) {
+    int r;
+    for (r = REGNUM-1; r >= 0; r--)
+        if (SysPointer < 0) {
+            *error += CPU_STACK_ERROR;
+            printf("ERROR: Sysstack exceeded\n");
+            toRegs[r] = STACK_ERROR_DEFAULT;
+        } else
+            toRegs[r] = SysStack[SysPointer--];  
 }
 
 /* Deallocates the queue data structures on the C simulator running this program

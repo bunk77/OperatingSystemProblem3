@@ -1,15 +1,15 @@
 things to do:
 
 Bun
-	GitHub and trap functions, isr, sysStackSave/Restore if needed
+	GitHub and trap functions, isr
 	timer thread
 
 Chris
-	create new types of wrapper structs (PCB and CPU) & (struct waitingQ)
-	IO thread
+	integrate anything missed in Chris's stuff
+	IO thread, other threads or functions?
 
 Mark
-	by Saturday - redesign problem2 files to work with below restructuring
+	finish integrating Chris's stuff (by tonight)
 	once everyone submits to GitHub, mark will combine everything
 
 Paul

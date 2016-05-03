@@ -32,6 +32,7 @@
 #define MAX_PC_MIN 100
 #define MAX_PC_RANGE 2000
 #define TERM_RANGE 10
+#define MIN_IO_CALL 25
 
 #define DEFAULT_STATE created
 #define DEFAULT_PC 0Lu

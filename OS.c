@@ -172,7 +172,7 @@ int mainLoopOS(int *error) {
         } else {
 
             /*** INCREMENT PC ***/
-            *pc += 1;
+            (*pc)++;
             if (DEBUG) printf("PC incremented to %lu\n", *pc);
             
             /*** TERMINATE CHECK ***/
@@ -200,7 +200,7 @@ int mainLoopOS(int *error) {
                     context_switch = true;
                 }
                 pthread_mutex_unlock(&MUTEX_timer);
-                if (context_switch) {
+                if (context_switch || PCB_SCHEDULE_EVERY) {
                     if (DEBUG) printf("At cycle PC = %lu, timer interrupts %lu\n", *pc, current->pid);
                     sysStackPush(CPU->regs, error);
                     interrupt(INTERRUPT_TIMER, NULL, error);
@@ -208,10 +208,6 @@ int mainLoopOS(int *error) {
                     if (DEBUG) printf("At cycle PC = %lu, process %lu begins\n", *pc, current->pid);
                 }
                 if (DEBUG) printf("No cycle PC \n");
-            } else if (PCB_SCHEDULE_EVERY) {
-                sysStackPush(CPU->regs, error);
-                interrupt(INTERRUPT_TIMER, NULL, error);
-                sysStackPop(CPU->regs, error);
             }
             
             /*** IO CHECK ***/
@@ -226,8 +222,9 @@ int mainLoopOS(int *error) {
                 }
             
             /*** PCB TRAPS CHECK ***/
-            for (t = 0; t < IO_NUMBER * IO_CALLS; t++)
-                if (*pc == *(IO_TRAPS[t/IO_CALLS][t%IO_CALLS])) {
+            for (t = 0; t < IO_NUMBER * IO_CALLS; t++) 
+//                printf("---------------------%d: %lu\n", t, (*IO_TRAPS)[t/IO_CALLS][t%IO_CALLS]);   
+                if (*pc == (*IO_TRAPS)[t/IO_CALLS][t%IO_CALLS]) {
                     if (DEBUG) printf("IO %d at PC %lu for process %lu\n", t/IO_CALLS, *pc, current->pid);
                     sysStackPush(CPU->regs, error);
                     trap_iohandler(t/IO_CALLS, error);
@@ -485,7 +482,7 @@ int sysStackPush(REG_p fromRegs, int* error) {
             *error += CPU_STACK_ERROR;
             printf("ERROR: Sysstack exceeded\n");        
         } else
-            SysStack[SysPointer++] = ((word*)fromRegs)[r];
+            SysStack[SysPointer++] = fromRegs->gpu[r];
 
     int i;
     if (STACK_DEBUG) 
@@ -501,7 +498,7 @@ int sysStackPop(REG_p toRegs, int* error) {
         if (SysPointer <= 0) {
             *error += CPU_STACK_ERROR;
             printf("ERROR: Sysstack exceeded\n");
-            ((word*)&toRegs)[r] = STACK_ERROR_DEFAULT;
+            toRegs->gpu[r] = STACK_ERROR_DEFAULT;
         } else {
             if (STACK_DEBUG) printf("\tpopping SysStack[%d] = %lu ", SysPointer-1, SysStack[SysPointer-1]);
             toRegs->gpu[r] = SysStack[--SysPointer];

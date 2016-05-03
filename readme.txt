@@ -2,6 +2,7 @@ things to do:
 
 anyone
 	make a second PCB toString that prints out all of the PCB and reg info
+	figure out why most processes have pc incremented by 2 on current settings (may be unimportant)
 
 Bun
 	GitHub and trap functions, isr

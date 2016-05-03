@@ -39,7 +39,7 @@ REG_p REG_init(REG_p this, int *ptr_error) {
         this->reg.term_count = 0;
         this->reg.TERMINATE = rand() % TERM_RANGE;
         for (t = 0; t < IO_NUMBER * IO_CALLS; t++)
-            this->reg.IO_TRAPS[(int) (t / IO_CALLS)][t % IO_CALLS] = rand() % this->reg.MAX_PC;
+            this->reg.IO_TRAPS[(int) (t / IO_CALLS)][t % IO_CALLS] = MIN_IO_CALL + (rand() % (this->reg.MAX_PC - MIN_IO_CALL));
     }
     return this;
 }

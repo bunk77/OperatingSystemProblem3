@@ -21,6 +21,8 @@
 #define NODE_STRING_ERROR 31
 #define NODE_DATA_ERROR 37
 
+#define FIFOQ_TOSTRING_MAX 4096
+
 typedef struct FIFOq * FIFOq_p;
 typedef struct Node_type Node;
 typedef Node * Node_p;
@@ -40,7 +42,7 @@ struct Node_type {
 FIFOq_p FIFOq_construct(int*);
 void    FIFOq_destruct (FIFOq_p, int*);              // deallocates pcb from the heap
 int     FIFOq_init     (FIFOq_p, int*);              // sets default values for member data
-int     FIFOq_is_empty (FIFOq_p, int*);
+int     FIFOq_is_empty (FIFOq_p, int*);  
 void    FIFOq_enqueue  (FIFOq_p, Node_p, int*);
 void    FIFOq_enqueuePCB(FIFOq_p, PCB_p, int*);
 PCB_p   FIFOq_dequeue  (FIFOq_p, int*);

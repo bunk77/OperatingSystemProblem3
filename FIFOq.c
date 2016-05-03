@@ -75,7 +75,7 @@ int FIFOq_is_empty(FIFOq_p this, int *error) {
  * this is the FIFO queue whose beautiful little village is growing by one
  * next is the node to queue into the FIFO queue
  * error is the pointer error
- * 
+ *   
  * returns nothing because too bad
  */
 void FIFOq_enqueue(FIFOq_p this, Node_p next, int *error) {

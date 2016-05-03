@@ -21,7 +21,8 @@
 #define mutex pthread_mutex_t
 #define cond pthread_cond_t
 
-#define DEBUG true
+#define DEBUG false
+#define STACK_DEBUG false
 #define EXIT_STATUS_MESSAGE true
 #define OUTPUT true
 #define START_IDLE false
@@ -77,7 +78,7 @@ void     trap_iohandler  (const int T, int* error);
 void     interrupt       (const int INTERRUPT, void*, int* error);
 void     isr_timer       (int* error);
 void     isr_iocomplete  (const int IO, int* error);
-void     scheduler       (const int INTERRUPT, int* error);
+void     scheduler       (int* error);
 void     dispatcher      (int* error);
 int      createPCBs  	 (int *error);
 int      sysStackPush    (REG_p, int* error);

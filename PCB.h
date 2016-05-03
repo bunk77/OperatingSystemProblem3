@@ -41,7 +41,7 @@
 #define PCB_INIT_ERROR 7
 #define PCB_OTHER_ERROR 41
 
-#define PCB_TOSTRING_LEN 80
+#define PCB_TOSTRING_LEN 180
 
 typedef enum {false, true} bool;
 enum state_type {created = 0, ready, running, interrupted, waiting, terminated};

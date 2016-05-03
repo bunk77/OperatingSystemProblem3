@@ -124,19 +124,18 @@ int mainLoopOS(int *error) {
     if (DEBUG) printf("Main loop initialization\n");
 
     int t;
-    
+    word clock = 0;
     current = idl; //current's default state if no ready PCBs to run
     current->state = running;
     
     sysStackPush(current->regs, error);
-    printf("current max_pc is %lu\n", current->regs->reg.MAX_PC);
+    if (STACK_DEBUG) printf("current max_pc is %lu\n", current->regs->reg.MAX_PC);
     const CPU_p CPU = (CPU_p) malloc(sizeof(struct CPU));
     CPU->regs = (REG_p) malloc(sizeof (union regfile));
     REG_init(CPU->regs, error);
-    printf("pre max_pc is %lu\n", CPU->regs->reg.MAX_PC);
+    if (STACK_DEBUG) printf("pre max_pc is %lu\n", CPU->regs->reg.MAX_PC);
     sysStackPop(CPU->regs, error);
-    printf("posddddd\n"); 
-   printf("post max_pc is %lu\n", CPU->regs->reg.MAX_PC);
+    if (STACK_DEBUG) printf("post max_pc is %lu\n", CPU->regs->reg.MAX_PC);
     //    int r;
 //        for (r = REGNUM-1; r >= 0; r--)
 //            printf("at location %d: %lu\n", r, ((word*)&(CPU->regs))[r]);
@@ -162,10 +161,9 @@ int mainLoopOS(int *error) {
     /*************************** MAIN LOOP OS *********************************/
     /**************************************************************************/
     do {
-
+        clock++;
         exit = createPCBs(error);
         if (DEBUG) printf("PCBs created exit = %d\n", exit);
-                printf("error: %d exit: %d\n", *error, exit);
                 
         if (current == NULL || error == NULL) {
             *error += CPU_NULL_ERROR;
@@ -237,20 +235,20 @@ int mainLoopOS(int *error) {
                     if (DEBUG) printf("Process %lu at PC %lu place in wQ of IO %d\n", current->pid, *pc, t/IO_CALLS);
                     if (DEBUG) printf("At cycle PC = %lu, process %lu begins\n", *pc, current->pid);   
                 }
-                    printf("error: %d exit: %d\n", *error, exit);
+                
             if (DEBUG) printf("PC cycle %lu finished\n", *pc);
-            printf("c=i %d\n", current == idl);
-                            sysStackPush(CPU->regs, error);
-//                interrupt(INTERRUPT_TIMER, NULL, error);
-                sysStackPop(CPU->regs, error);
 
-        printf("error: %d exit: %d\n", *error, exit);
         }   
-        printf("error: %d exit: %d\n", *error, exit);
+
     } while (!*error  && !exit);
+    
+    sysStackPush(CPU->regs, error);
+    sysStackPop(current->regs, error);
+    
     /**************************************************************************/
     /*************************** *********** **********************************/
     /**************************************************************************/    
+    if (EXIT_STATUS_MESSAGE) printf("System Clock: %lu\n", clock);
     
     cleanup(error);
     
@@ -311,11 +309,12 @@ void isr_timer(int* error) {
     PCB_setState(current, interrupted);
     
     //assigns Current PCB PC and SW values to popped values of SystemStack
+        
     if (DEBUG) printf("\t\tStack going to pop isrtimer: %d\n", SysPointer);
     sysStackPop(current->regs, error);
        
     //call Scheduler and pass timer interrupt parameter
-    scheduler(INTERRUPT_TIMER, error);
+    scheduler(error);
 }
 
 void isr_iocomplete(const int IO, int* error) {
@@ -331,7 +330,7 @@ void isr_iocomplete(const int IO, int* error) {
  * currently running process in the ready queue and sets its state to ready.
  * Then calls the dispatcher.
  */
-void scheduler(const int INTERRUPT, int* error) {
+void scheduler(int* error) {
 
     //for measuring every 4th output
     static int context_switch = 0;
@@ -363,6 +362,12 @@ void scheduler(const int INTERRUPT, int* error) {
     
     if (DEBUG) printf("createQ transferred to readyQ\n");
             
+    if (readyQ->size < 2) {
+        PCB_setState(current, running);
+        sysStackPush(current->regs, error);
+        return;
+    }
+    
     if (!(context_switch % 4)) {
         char pcbstr[PCB_TOSTRING_LEN];
         printf(">PCB: %s\n", PCB_toString(current, pcbstr, error));        
@@ -370,6 +375,7 @@ void scheduler(const int INTERRUPT, int* error) {
         printf(">Switching to: %s\n", PCB_toString(readyQ->head->data, rdqstr, error));        
     }
 
+   
     if (current != idl && current->state != terminated) {
         current->state = ready;
         FIFOq_enqueuePCB(readyQ, current, error);
@@ -378,10 +384,15 @@ void scheduler(const int INTERRUPT, int* error) {
 
     if (!(context_switch % 4)) {
         char runstr[PCB_TOSTRING_LEN];
-        printf(">Now running: %s\n", PCB_toString(current, runstr, error));        
+        printf(">Now running: %s\n", PCB_toString(current, runstr, error));     
+        
+        
+        /**** some point after here is the mysterious system crash on idl switch*/
+        
+        
         char rdqstr[PCB_TOSTRING_LEN];
         printf(">Returned to ready queue: %s\n", PCB_toString(readyQ->tail->data, rdqstr, error));        
-        int stz = 1024;
+        int stz = FIFOQ_TOSTRING_MAX;
         char str[stz];
         printf(">%s\n", FIFOq_toString(readyQ, str, &stz, error));
 
@@ -477,38 +488,29 @@ int sysStackPush(REG_p fromRegs, int* error) {
             SysStack[SysPointer++] = ((word*)fromRegs)[r];
 
     int i;
-    for (i = 0; i <= SysPointer; i++) {
-        printf("\tPostPush SysStack[%d] = %lu\n", i, SysStack[i]);
-    }
-        //these are the items that need to pop off the stack
-//    word pc = current->regs->pc; //we used a long to match the PCB value for PC
-//    word MAX_PC = current->regs->MAX_PC;
-//    word sw = current->regs->sw;
-//    word term_count = current->regs->term_count;
-//    word TERMINATE = current->regs->TERMINATE;
-//    word IO_TRAPS[IO_NUMBER][IO_CALLS];
-//    for (t = 0; t < IO_NUMBER * IO_CALLS; t++)
-//       IO_TRAPS[(int)(t/IO_CALLS)][t%IO_CALLS] = current->IO_TRAPS[(int)(t/IO_CALLS)][t%IO_CALLS];
-
+    if (STACK_DEBUG) 
+        for (i = 0; i <= SysPointer; i++) {
+            printf("\tPostPush SysStack[%d] = %lu\n", i, SysStack[i]);
+        }
 }
 
 int sysStackPop(REG_p toRegs, int* error) {
     int r;
-    printf("max_pc is %lu\n", toRegs->reg.MAX_PC);
+    if (STACK_DEBUG) printf("max_pc is %lu\n", toRegs->reg.MAX_PC);
     for (r = REGNUM-1; r >= 0; r--)
         if (SysPointer <= 0) {
             *error += CPU_STACK_ERROR;
             printf("ERROR: Sysstack exceeded\n");
             ((word*)&toRegs)[r] = STACK_ERROR_DEFAULT;
         } else {
-            printf("\tpopping SysStack[%d] = %lu ", SysPointer-1, SysStack[SysPointer-1]);
+            if (STACK_DEBUG) printf("\tpopping SysStack[%d] = %lu ", SysPointer-1, SysStack[SysPointer-1]);
             toRegs->gpu[r] = SysStack[--SysPointer];
-            printf("at location %d: %lu\n", r, toRegs->gpu[r]);
+            if (STACK_DEBUG) printf("at location %d: %lu\n", r, toRegs->gpu[r]);
         }
-    printf("max_pc is %lu\n", toRegs->reg.MAX_PC);
+    if (STACK_DEBUG) printf("max_pc is %lu\n", toRegs->reg.MAX_PC);
     int i;
     for (i = 0; i <= SysPointer; i++) {
-        printf("\tPost-Pop SysStack[%d] = %lu\n", i, SysStack[i]);
+        if (STACK_DEBUG) printf("\tPost-Pop SysStack[%d] = %lu\n", i, SysStack[i]);
     }
 }
 
@@ -536,18 +538,19 @@ void cleanup(int* error) {
         pthread_mutex_unlock(&(IO[t]->MUTEX_io));
     }
             
-
-    if (current != idl) {
+    int endidl = current->pid == idl->pid;
+//    printf("%lu %lu\n", current->pid, idl->pid);
+    if (idl != NULL) {
         if (EXIT_STATUS_MESSAGE) {
             char pcbstr[PCB_TOSTRING_LEN];
             printf("System Idle: %s\n", PCB_toString(idl, pcbstr, error));
         }
         PCB_destruct(idl);
     }
-    if (current != NULL) {
+    if (!endidl && current != NULL) {
         if (EXIT_STATUS_MESSAGE) {
             char pcbstr[PCB_TOSTRING_LEN];
-            printf("Running PCB: %s\n", PCB_toString(idl, pcbstr, error));
+            printf("Running PCB: %s\n", PCB_toString(current, pcbstr, error));
         }
         PCB_destruct(current);
     }
@@ -558,7 +561,7 @@ void cleanup(int* error) {
  * so that we don't have memory leaks and horrible garbage.
  */
 void queueCleanup(FIFOq_p queue, char *qstr, int *error) {
-    int stz = 256;
+    int stz = FIFOQ_TOSTRING_MAX;
     char str[stz];
     
     if (!FIFOq_is_empty(queue, error)) {

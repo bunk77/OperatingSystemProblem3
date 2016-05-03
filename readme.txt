@@ -9,8 +9,7 @@ Chris
 	IO thread, other threads or functions?
 
 Mark
-	finish integrating Chris's stuff (by tonight)
-	once everyone submits to GitHub, mark will combine everything
+	once everyone submits to GitHub, mark will debug
 
 Paul
 	read up on everything and understand it well enough to do what needed

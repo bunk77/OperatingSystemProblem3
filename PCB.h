@@ -6,6 +6,14 @@
 
 #ifndef PCB_H
 #define PCB_H
+
+#include <stdlib.h>
+#include <stddef.h>
+#include <string.h>
+#include <stdio.h>
+#include <time.h>
+#include <limits.h>
+
 #define created created_
 #define bool bool_
 #define true true_
@@ -13,11 +21,13 @@
 
 #define word unsigned long
 
-#define NUMREGS 16
+//#define NUMREGS 16
+#define REGNUM (REG_COUNT + IO_NUMBER*IO_CALLS)
 #define PRIORITIES_TOTAL 16
 #define LOWEST_PRIORITY (PRIORITIES_TOTAL - 1)
 #define IO_NUMBER 2
 #define IO_CALLS 4
+#define REG_COUNT 5
 
 #define MAX_PC_MIN 100
 #define MAX_PC_RANGE 2000
@@ -40,12 +50,8 @@ enum state_type {created = 0, ready, running, interrupted, waiting, terminated};
 //typedef struct pcb PCB;
 typedef struct PCB * PCB_p;
 typedef struct CPU * CPU_p;
-typedef struct regfile * REG_p;
-
-
-struct CPU {
-  REG_p regs;
-};
+typedef union regfile REG;
+typedef REG * REG_p;
 
 struct PCB {
   REG_p regs;
@@ -58,16 +64,24 @@ struct PCB {
   
 };
 
-struct regfile {
-  //save to PCB from system
-  word pc;         // holds the current pc value when pre emptied
-  word MAX_PC;
-  word sw;         // sw register for sw stuff
-  word term_count;
-  word TERMINATE;
-  word IO_TRAPS[IO_NUMBER][IO_CALLS];
-    
+union regfile {
+            //save to PCB from system
+    struct {
+        word pc, MAX_PC, sw, term_count, TERMINATE, IO_TRAPS[IO_NUMBER][IO_CALLS];
+    } reg;
+    word gpu[REGNUM];
 };
+
+//static const size_t REG_o[] = { 
+//  offsetof(REG, pc),
+//  offsetof(REG, MAX_PC),
+//  offsetof(REG, sw),
+//  offsetof(REG, term_count),
+//  offsetof(REG, TERMINATE),
+//  offsetof(REG, IO_TRAPS)
+//};
+
+
 
 PCB_p 			PCB_construct 	(int *ptr_error);
 PCB_p 			PCB_construct_init 	(int *ptr_error);

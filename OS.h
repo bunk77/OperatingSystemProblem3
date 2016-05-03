@@ -21,10 +21,13 @@
 #define mutex pthread_mutex_t
 #define cond pthread_cond_t
 
-#define DEBUG false
+#define DEBUG true
 #define EXIT_STATUS_MESSAGE true
 #define OUTPUT true
 #define START_IDLE false
+#define PCB_CREATE_EVERY true
+#define PCB_CREATE_FIRST true
+#define PCB_SCHEDULE_EVERY true
 #define NO_INTERRUPT 9999
 #define INTERRUPT_TIMER 5555
 #define INTERRUPT_TERMINATE 8888
@@ -43,6 +46,10 @@
 
 //note on style: ALLCAPS_lowercase is either a MUTEX_ variable or the data
 //               protected by the MUTEX_
+
+struct CPU {
+  REG_p regs;
+};
 
 struct io_thread_type {
     thread THREAD_io;

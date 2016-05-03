@@ -4,11 +4,6 @@
  * Bun Kak, Chris Ottersen, Mark Peters, Paul Zander
  */
 
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
-#include <time.h>
-#include <limits.h>
 #include "PCB.h"
 
 //struct and error defines originally here
@@ -21,7 +16,7 @@ char *STATE[] = {"created", "ready", "running", "interrupted", "waiting", "termi
  */
 PCB_p PCB_construct(int *ptr_error) {
     PCB_p this = (PCB_p) malloc(sizeof (struct PCB));
-    this->regs = (REG_p) malloc(sizeof (struct regfile));
+    this->regs = (REG_p) malloc(sizeof (union regfile));
     int error = ((!this) * PCB_INIT_ERROR);
     this->pid = 0;
     this->priority = 0;
@@ -38,14 +33,15 @@ REG_p REG_init(REG_p this, int *ptr_error) {
         *ptr_error += PCB_NULL_ERROR;
     else {
         int t;
-        this->pc = DEFAULT_PC;
-        this->MAX_PC = rand() % (MAX_PC_RANGE + 1) + MAX_PC_MIN;
-        this->sw = DEFAULT_SW;
-        this->term_count = 0;
-        this->TERMINATE = rand() % TERM_RANGE;
+        this->reg.pc = DEFAULT_PC;
+        this->reg.MAX_PC = rand() % (MAX_PC_RANGE + 1) + MAX_PC_MIN;
+        this->reg.sw = DEFAULT_SW;
+        this->reg.term_count = 0;
+        this->reg.TERMINATE = rand() % TERM_RANGE;
         for (t = 0; t < IO_NUMBER * IO_CALLS; t++)
-            this->IO_TRAPS[(int) (t / IO_CALLS)][t % IO_CALLS] = rand() % this->MAX_PC;
+            this->reg.IO_TRAPS[(int) (t / IO_CALLS)][t % IO_CALLS] = rand() % this->reg.MAX_PC;
     }
+    return this;
 }
 
 PCB_p PCB_construct_init(int *ptr_error) {
@@ -208,7 +204,7 @@ unsigned short PCB_getPriority(PCB_p this, int *ptr_error) {
 int PCB_setPc(PCB_p this, word pc) {
     int error = (this == NULL) * PCB_NULL_ERROR;
     if (!error) {
-        this->regs->pc = pc;
+        this->regs->reg.pc = pc;
     }
     return error; // TODO: write
 }
@@ -225,7 +221,7 @@ word PCB_getPc(PCB_p this, int *ptr_error) {
     if (ptr_error != NULL) {
         *ptr_error += error;
     }
-    return error ? -1 : this->regs->pc; // TODO: write
+    return error ? -1 : this->regs->reg.pc; // TODO: write
 }
 
 /**
@@ -238,7 +234,7 @@ word PCB_getPc(PCB_p this, int *ptr_error) {
 int PCB_setSw(PCB_p this, word sw) {
     int error = (this == NULL) * PCB_NULL_ERROR;
     if (!error) {
-        this->regs->sw = sw;
+        this->regs->reg.sw = sw;
     }
     return error; // TODO: write
 }
@@ -254,7 +250,7 @@ word PCB_getSw(PCB_p this, int *ptr_error) {
     if (ptr_error != NULL) {
         *ptr_error += error;
     }
-    return error ? ~0 : this->regs->sw; // TODO: write
+    return error ? ~0 : this->regs->reg.sw; // TODO: write
 }
 
 /**
@@ -270,7 +266,7 @@ char * PCB_toString(PCB_p this, char *str, int *ptr_error) {
     if (!error) {
         str[0] = '\0';
         const char * format = "PID: 0x%04lx  PC: 0x%05lx  State: %s  Priority 0x%x";
-        snprintf(str, (size_t) PCB_TOSTRING_LEN - 1, format, this->pid, this->regs->pc, STATE[this->state], this->priority);
+        snprintf(str, (size_t) PCB_TOSTRING_LEN - 1, format, this->pid, this->regs->reg.pc, STATE[this->state], this->priority);
     }
 
     if (ptr_error != NULL) {

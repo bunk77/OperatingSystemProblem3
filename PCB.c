@@ -75,7 +75,7 @@ int PCB_destruct(PCB_p this) {
  * @return 
  */
 int PCB_init(PCB_p this) {
-    static unsigned long pidCounter = ULONG_MAX;
+    static word pidCounter = ULONG_MAX;
     static int firstCall = 1;
     if (!firstCall) {
         srand(time(NULL) << 1);
@@ -84,7 +84,7 @@ int PCB_init(PCB_p this) {
     int error = (this == NULL) * PCB_NULL_ERROR;
     int t;
     if (!error) {
-        REG_init(this->regs, error);
+        REG_init(this->regs, &error);
         this->pid = ++pidCounter;
         this->priority = rand() & LOWEST_PRIORITY;
         this->state = DEFAULT_STATE;
@@ -101,7 +101,7 @@ int PCB_init(PCB_p this) {
  * @param pid the new pid value
  * @return 
  */
-int PCB_setPid(PCB_p this, unsigned long pid) {
+int PCB_setPid(PCB_p this, word pid) {
     // verify pid does not already exist
     int error = (this == NULL) * PCB_NULL_ERROR;
     if (!error) {
@@ -116,7 +116,7 @@ int PCB_setPid(PCB_p this, unsigned long pid) {
  * @param this
  * @return the pid of the process
  */
-unsigned long PCB_getPid(PCB_p this, int *ptr_error) {
+word PCB_getPid(PCB_p this, int *ptr_error) {
     int error = (this == NULL) * PCB_NULL_ERROR;
 
     if (ptr_error != NULL) {
@@ -205,7 +205,7 @@ unsigned short PCB_getPriority(PCB_p this, int *ptr_error) {
  * @param pid the new pid value
  * @return 
  */
-int PCB_setPc(PCB_p this, unsigned long pc) {
+int PCB_setPc(PCB_p this, word pc) {
     int error = (this == NULL) * PCB_NULL_ERROR;
     if (!error) {
         this->regs->pc = pc;
@@ -219,7 +219,7 @@ int PCB_setPc(PCB_p this, unsigned long pc) {
  * @param this
  * @return the address where the program will resume
  */
-unsigned long PCB_getPc(PCB_p this, int *ptr_error) {
+word PCB_getPc(PCB_p this, int *ptr_error) {
     int error = (this == NULL) * PCB_NULL_ERROR;
 
     if (ptr_error != NULL) {
@@ -235,7 +235,7 @@ unsigned long PCB_getPc(PCB_p this, int *ptr_error) {
  * @param pid the new pid value
  * @return 
  */
-int PCB_setSw(PCB_p this, unsigned long sw) {
+int PCB_setSw(PCB_p this, word sw) {
     int error = (this == NULL) * PCB_NULL_ERROR;
     if (!error) {
         this->regs->sw = sw;
@@ -249,7 +249,7 @@ int PCB_setSw(PCB_p this, unsigned long sw) {
  * @param this
  * @return the address where the program will resume
  */
-unsigned long PCB_getSw(PCB_p this, int *ptr_error) {
+word PCB_getSw(PCB_p this, int *ptr_error) {
     int error = (this == NULL) * PCB_NULL_ERROR;
     if (ptr_error != NULL) {
         *ptr_error += error;

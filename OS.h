@@ -28,7 +28,7 @@
 #define NO_INTERRUPT 9999
 #define INTERRUPT_TIMER 5555
 #define INTERRUPT_TERMINATE 8888
-#define INTERRUPT_IO 4444
+#define INTERRUPT_IOCOMPLETE 4444
 
 #define TIME_QUANTUM 300
 #define MAX_PROCESSES 30
@@ -58,7 +58,7 @@ struct io_thread_type {
 
 typedef struct io_thread_type* io_thread;
 
-//extern unsigned long SsyStack[SYSSIZE];
+//extern word SsyStack[SYSSIZE];
 //extern int SysPointer;
 
 int      bootOS          ();
@@ -66,16 +66,18 @@ int      mainLoopOS      (int *error);
 void*    timer           (void*);
 void*    io              (void*);
 void     trap_terminate  ();
-void     trap_iohandler  (int t, int* error);
-void     isr_timer       (FIFOq_p createQ, FIFOq_p readyQ, int* error);
-void     isr_iocomplete  (int io, int* error);
-void     scheduler       (const int INTERRUPT, FIFOq_p createQ, FIFOq_p readyQ, int* error);
-void     dispatcher      (FIFOq_p readyQ, int* error);
-int      sysStackPush    (void*, int* error);
-int      sysStackPop     (void*, int* error);
-void     queueCleanup    (FIFOq_p, char*, int*);
+void     trap_iohandler  (const int T, int* error);
+void     interrupt       (const int INTERRUPT, void*, int* error);
+void     isr_timer       (int* error);
+void     isr_iocomplete  (const int IO, int* error);
+void     scheduler       (const int INTERRUPT, int* error);
+void     dispatcher      (int* error);
+int      createPCBs  	 (int *error);
+int      sysStackPush    (REG_p, int* error);
+int      sysStackPop     (REG_p, int* error);
+void     cleanup         (int* error);
+void     queueCleanup    (FIFOq_p, char*, int* error);
 void     stackCleanup    ();
-int      createPCBs  	(FIFOq_p createQ, int *error);
-//static void     run             (unsigned long *pc, int *error);
+//static void     run             (word *pc, int *error);
 
 #endif

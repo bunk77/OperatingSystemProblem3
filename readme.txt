@@ -1,5 +1,8 @@
 things to do:
 
+anyone
+	make a second PCB toString that prints out all of the PCB and reg info
+
 Bun
 	GitHub and trap functions, isr
 	timer thread

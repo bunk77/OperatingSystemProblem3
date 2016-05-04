@@ -57,11 +57,6 @@ struct io_thread_type {
     mutex MUTEX_io;
     bool INTERRUPT_iocomplete;
     FIFOq_p waitingQ;
-
-    /*struct {
-        bool interrupt_io_complete;
-        FIFOq_p waitingQ_IO;
-    } waitingIO[ioThreadCount];*/
 };
 
 typedef struct io_thread_type* io_thread;

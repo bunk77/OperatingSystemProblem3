@@ -273,6 +273,7 @@ void* io(void* tid) {
 void    trap_terminate() {
     
 }
+
 void trap_iohandler(const int T, int* error) {
     
 }
@@ -382,11 +383,6 @@ void scheduler(int* error) {
     if (!(context_switch % 4)) {
         char runstr[PCB_TOSTRING_LEN];
         printf(">Now running: %s\n", PCB_toString(current, runstr, error));     
-        
-        
-        /**** some point after here is the mysterious system crash on idl switch*/
-        
-        
         char rdqstr[PCB_TOSTRING_LEN];
         printf(">Returned to ready queue: %s\n", PCB_toString(readyQ->tail->data, rdqstr, error));        
         int stz = FIFOQ_TOSTRING_MAX;

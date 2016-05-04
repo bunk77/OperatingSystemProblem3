@@ -1,22 +1,19 @@
 things to do:
 
-anyone
-	make a second PCB toString that prints out all of the PCB and reg info
-	figure out why most processes have pc incremented by 2 on current settings (may be unimportant)
-
 Bun
-	GitHub and trap functions, isr
+	trap_terminate, trap_iohandler, isr_iocomplete
 	timer thread
 
 Chris
 	integrate anything missed in Chris's stuff
-	IO thread, other threads or functions?
+	IO thread
 
 Mark
-	once everyone submits to GitHub, mark will debug
+	debug
 
 Paul
-	read up on everything and understand it well enough to do what needed
+	make a second PCB toString that prints out all of the PCB and reg info
+	figure out why most processes have pc incremented by 2 on current settings
 
 
 C pocket reference cuz there's a cow on the front
@@ -65,10 +62,10 @@ Changes:
 		5 switch: check's PC against both IO[4] arrays
 			true call trap_IO_handler(TRAP_SRN) TRAP_SRN is 1 or 2
 
-	sysStackSaveState(PCB or CPU) - Mark after Chris struct
+	sysStackSaveState(PCB or CPU) - 
 		puts all (PCB or CPU) contents onto stack	
 
-	sysStackRestoreState(PCB or CPU) - Mark after Chris struct
+	sysStackRestoreState(PCB or CPU) - 
 		restores to (PCB or CPU) contents of the stack
 
 	trap_terminate - Bun
@@ -89,7 +86,7 @@ Changes:
 		sets IO_x_COMPLETE to false
 		signals IO_x that it can resume IO-ing
 
-	isrTimer(see .h) - Mark check if still good
+	isrTimer(see .h) - 
 		changes out current running process and scheduler->dispatcher
 
 	timer(???) thread - Chris

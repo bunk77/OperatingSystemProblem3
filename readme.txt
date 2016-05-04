@@ -14,7 +14,7 @@ Mark
 Paul
 	make a second PCB toString that prints out all of the PCB and reg info
 	figure out why most processes have pc incremented by 2 on current settings
-
+	commenting for functionss (see examples)
 
 C pocket reference cuz there's a cow on the front
 
@@ -62,10 +62,10 @@ Changes:
 		5 switch: check's PC against both IO[4] arrays
 			true call trap_IO_handler(TRAP_SRN) TRAP_SRN is 1 or 2
 
-	sysStackSaveState(PCB or CPU) - 
+	sysStackPush(PCB or CPU) - 
 		puts all (PCB or CPU) contents onto stack	
 
-	sysStackRestoreState(PCB or CPU) - 
+	sysStackPop(PCB or CPU) - 
 		restores to (PCB or CPU) contents of the stack
 
 	trap_terminate - Bun
@@ -80,16 +80,16 @@ Changes:
 		signal to IO_SRN_TRAP thread to start internal timer
 		call scheduler->dispatch new running process
 
-	isrIOComplete(io number)   - Bun
+	isr_iocomplete(io number)   - Bun
 		takes the head of the given IO queue and places it in the back
 			of the readyQ
 		sets IO_x_COMPLETE to false
 		signals IO_x that it can resume IO-ing
 
-	isrTimer(see .h) - 
+	isr_timer(see .h) - 
 		changes out current running process and scheduler->dispatcher
 
-	timer(???) thread - Chris
+	timer(???) thread - Bun
 		puts itself to sleep or has a long loop
 		on wakeup/loop end, timer interrupt
 		while (true)
@@ -97,7 +97,7 @@ Changes:
 				//nothing
 			signal CPU that timer is interrupting (calling isrTimer?)
 
-	io(???) thread x2 - Bun
+	io(???) thread x2 - Chris
 		puts istelf to sleep or has a long loop
 
 		while (items to process IO)

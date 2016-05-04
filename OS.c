@@ -84,7 +84,7 @@ int bootOS() {
         IO[t]->waitingQ = FIFOq_construct(&boot_error);
         IO[t]->INTERRUPT_iocomplete = false;
         pthread_mutex_init(&(IO[t]->MUTEX_io), NULL);
-        pthread_create(&(IO[t]->THREAD_io), NULL, io, (void*)t);
+        pthread_create(&(IO[t]->THREAD_io), NULL, io, (void*)(t+1));
     }
     
     //idl pcb has special parameters

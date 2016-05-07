@@ -56,6 +56,7 @@ struct io_thread_type {
     thread THREAD_io;
     mutex MUTEX_io;
     bool INTERRUPT_iocomplete;
+    bool SHUTOFF_io;
     FIFOq_p waitingQ;
 };
 

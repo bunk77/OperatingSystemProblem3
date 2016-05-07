@@ -19,6 +19,7 @@ static int SysPointer;
 static thread THREAD_timer;
 static mutex MUTEX_timer;
 static bool INTERRUPT_timer;
+static bool SHUTOFF_timer;
 
 /*IO*/
 static io_thread IO[IO_NUMBER];
@@ -75,6 +76,7 @@ int bootOS() {
     
     //Timer
     INTERRUPT_timer = false;
+    SHUTOFF_timer = false;
     pthread_mutex_init(&MUTEX_timer, NULL);
     pthread_create(&THREAD_timer, NULL, timer, NULL);
         
@@ -83,6 +85,7 @@ int bootOS() {
         IO[t] = (io_thread)malloc(sizeof(struct io_thread_type));
         IO[t]->waitingQ = FIFOq_construct(&boot_error);
         IO[t]->INTERRUPT_iocomplete = false;
+        IO[t]->SHUTOFF_io = false;
         pthread_mutex_init(&(IO[t]->MUTEX_io), NULL);
         pthread_create(&(IO[t]->THREAD_io), NULL, io, (void*)(t+1));
     }
@@ -519,16 +522,25 @@ void cleanup(int* error) {
     queueCleanup(readyQ, "readyQ", error);
     queueCleanup(createQ, "createQ", error);
     
+    pthread_mutex_lock(&MUTEX_timer);
+    SHUTOFF_timer = true;
+    pthread_mutex_unlock(&MUTEX_timer);
+    pthread_join(THREAD_timer, NULL);
+    //...
     pthread_mutex_destroy(&MUTEX_timer);
+    
     char wQ[10] = "waitingQ_x";
     for (t = 0; t < IO_NUMBER; t++) {
         pthread_mutex_lock(&(IO[t]->MUTEX_io));
+        &(IO[t]->SHUTOFF_io) = true;
+        pthread_mutex_unlock(&(IO[t]->MUTEX_io));
+        pthread_join(&(IO[t]->THREAD_io), NULL);
+        //...
+        pthread_mutex_destroy(&(IO[t]->MUTEX_io));
         wQ[9] = (char)t;
         queueCleanup(IO[t]->waitingQ, wQ, error);
-        pthread_mutex_destroy(&(IO[t]->MUTEX_io));
         free(IO[t]);
         IO[t] = NULL;
-        pthread_mutex_unlock(&(IO[t]->MUTEX_io));
     }
             
     int endidl = current->pid == idl->pid;

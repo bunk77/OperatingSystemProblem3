@@ -125,7 +125,7 @@ PCB_p FIFOq_dequeue(FIFOq_p this, int *error) {
         PCB_p pcb = node->data;
 
         // a dequeued PCB is in the ready state
-        PCB_setState(pcb, 2);
+        //PCB_setState(pcb, 2);
 
         Node_destruct(node);
         return pcb;

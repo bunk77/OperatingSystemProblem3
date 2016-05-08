@@ -16,6 +16,10 @@
 #include "FIFOq.h"
 #include "PCB.h"
 
+/* DOESN'T DISPLAY WARNINGS THAT ARE DUE TO ULONG WORD CAST */
+//words are ulongs, silly
+#pragma GCC diagnostic ignored "-Wformat="
+
 #define thread pthread_t
 #define mutex pthread_mutex_t
 #define cond pthread_cond_t
@@ -24,16 +28,20 @@
 #define STACK_DEBUG false
 #define EXIT_STATUS_MESSAGE true
 #define OUTPUT true
+#define OUTPUT_CONTEXT_SWITCH 1
+
 #define START_IDLE false
-#define PCB_CREATE_EVERY true
-#define PCB_CREATE_FIRST true
-#define PCB_SCHEDULE_EVERY true
+#define PCB_CREATE_EVERY false
+#define PCB_CREATE_FIRST false
+#define PCB_SCHEDULE_EVERY false
+
 #define NO_INTERRUPT 9999
 #define INTERRUPT_TIMER 5555
 #define INTERRUPT_TERMINATE 8888
 #define INTERRUPT_IOCOMPLETE 4444
 
 #define TIME_QUANTUM 300
+#define TIMER_SLEEP (TIME_QUANTUM * 100000)
 #define MAX_PROCESSES 30
 #define SYSSIZE 256
 #define STACK_ERROR_DEFAULT 0
@@ -84,6 +92,7 @@ int      sysStackPop     (REG_p, int* error);
 void     cleanup         (int* error);
 void     queueCleanup    (FIFOq_p, char*, int* error);
 void     stackCleanup    ();
+void     nanosleeptest   ();
 //static void     run             (word *pc, int *error);
 
 #endif

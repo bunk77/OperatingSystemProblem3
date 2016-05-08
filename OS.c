@@ -13,13 +13,14 @@
 /*global declarations for system stack*/
 static word SysStack[SYSSIZE];
 static int SysPointer;
-
-
+ 
 /*timer fields*/
 static thread THREAD_timer;
 static mutex MUTEX_timer;
+static cond COND_timer;
 static bool INTERRUPT_timer;
 static bool SHUTOFF_timer;
+static word clock_;
 
 /*IO*/
 static io_thread IO[IO_NUMBER];
@@ -67,7 +68,7 @@ int main(void) {
 //initializes values and returns error
 int bootOS() {
 
-    int boot_error = 0;
+    int boot_error = OS_NO_ERROR;
     int t;
 
     //system wide
@@ -75,9 +76,11 @@ int bootOS() {
     SysPointer = 0; //points at next unassigned stack item; 0 is empty
     
     //Timer
+    clock_ = 0;
     INTERRUPT_timer = false;
     SHUTOFF_timer = false;
     pthread_mutex_init(&MUTEX_timer, NULL);
+    pthread_cond_init(&COND_timer, NULL);
     pthread_create(&THREAD_timer, NULL, timer, NULL);
         
     //IO
@@ -87,7 +90,8 @@ int bootOS() {
         IO[t]->INTERRUPT_iocomplete = false;
         IO[t]->SHUTOFF_io = false;
         pthread_mutex_init(&(IO[t]->MUTEX_io), NULL);
-        pthread_create(&(IO[t]->THREAD_io), NULL, io, (void*)(t+1));
+        pthread_cond_init(&(IO[t]->COND_io), NULL);
+        pthread_create(&(IO[t]->THREAD_io), NULL, io, (void*)t);
     }
     
     //idl pcb has special parameters
@@ -127,7 +131,6 @@ int mainLoopOS(int *error) {
     if (DEBUG) printf("Main loop initialization\n");
 
     int t;
-    word clock = 0;
     current = idl; //current's default state if no ready PCBs to run
     current->state = running;
     
@@ -143,6 +146,9 @@ int mainLoopOS(int *error) {
 //        for (r = REGNUM-1; r >= 0; r--)
 //            printf("at location %d: %lu\n", r, ((word*)&(CPU->regs))[r]);
     
+
+
+
     word * const pc = &(CPU->regs->reg.pc);
     word * const MAX_PC = &(CPU->regs->reg.MAX_PC);
     word * const sw = &(CPU->regs->reg.sw);
@@ -164,12 +170,14 @@ int mainLoopOS(int *error) {
     /*************************** MAIN LOOP OS *********************************/
     /**************************************************************************/
     do {
-        clock++;
+        clock_++;
         exit = createPCBs(error);
         if (DEBUG) printf("PCBs created exit = %d\n", exit);
-                
+            
         if (current == NULL || error == NULL) {
-            *error += CPU_NULL_ERROR;
+            if (error != NULL)
+                *error += CPU_NULL_ERROR;
+            exit = 1;
             printf("ERROR current process unassigned or error lost! %d", *error);
             
         } else {
@@ -214,14 +222,17 @@ int mainLoopOS(int *error) {
             }
             
             /*** IO CHECK ***/
-            if (DEBUG) printf("swretsdfgsdfg \n");
+            if (DEBUG) printf("Checking IO if complete \n");
             for (t = 0; t < IO_NUMBER; t++)
                 if (!pthread_mutex_trylock(&(IO[t]->MUTEX_io))) {
-                    if (DEBUG) printf("mut pre %d\n", t);
-                    if (IO[t]->INTERRUPT_iocomplete)
+                    if (DEBUG) printf("io %d Mutex locked\n", t);
+                    if (IO[t]->INTERRUPT_iocomplete) {
+                        sysStackPush(CPU->regs, error);
                         interrupt(INTERRUPT_IOCOMPLETE, (void*)t, error);
+                        sysStackPop(CPU->regs, error);
+                    }
                     pthread_mutex_unlock(&(IO[t]->MUTEX_io));
-                    if (DEBUG) printf("mut pst %d\n", t);
+                    if (DEBUG) printf("io %d Mutex unlocked\n", t);
                 }
             
             /*** PCB TRAPS CHECK ***/
@@ -241,14 +252,15 @@ int mainLoopOS(int *error) {
         }   
 
     } while (!*error  && !exit);
+    /**************************************************************************/
+    /*************************** *********** **********************************/
+    /**************************************************************************/    
+
     
     sysStackPush(CPU->regs, error);
     sysStackPop(current->regs, error);
     
-    /**************************************************************************/
-    /*************************** *********** **********************************/
-    /**************************************************************************/    
-    if (EXIT_STATUS_MESSAGE) printf("System Clock: %lu\n", clock);
+    if (EXIT_STATUS_MESSAGE) printf("System Clock: %lu\n", clock_);
     
     cleanup(error);
     
@@ -261,12 +273,16 @@ int mainLoopOS(int *error) {
 
 
 void* timer(void* unused) {
+
+
     printf("begin TIMER THREAD\n");
+    pthread_exit(NULL);
 }
 
 void* io(void* tid) {
     //tid is int for thread number
     printf("begin IO %d THREAD\n", (int)tid);
+    pthread_exit(NULL);
 }
 
 /******************************************************************************/
@@ -518,30 +534,32 @@ void cleanup(int* error) {
 
     int t;
     
-    queueCleanup(terminateQ, "terminateQ", error);
-    queueCleanup(readyQ, "readyQ", error);
-    queueCleanup(createQ, "createQ", error);
-    
     pthread_mutex_lock(&MUTEX_timer);
     SHUTOFF_timer = true;
     pthread_mutex_unlock(&MUTEX_timer);
     pthread_join(THREAD_timer, NULL);
     //...
     pthread_mutex_destroy(&MUTEX_timer);
+    pthread_cond_destroy(&COND_timer);
     
     char wQ[10] = "waitingQ_x";
     for (t = 0; t < IO_NUMBER; t++) {
         pthread_mutex_lock(&(IO[t]->MUTEX_io));
-        &(IO[t]->SHUTOFF_io) = true;
+        IO[t]->SHUTOFF_io = true;
         pthread_mutex_unlock(&(IO[t]->MUTEX_io));
-        pthread_join(&(IO[t]->THREAD_io), NULL);
+        pthread_join((IO[t]->THREAD_io), NULL);
         //...
         pthread_mutex_destroy(&(IO[t]->MUTEX_io));
+        pthread_cond_destroy(&(IO[t]->COND_io));
         wQ[9] = (char)t;
         queueCleanup(IO[t]->waitingQ, wQ, error);
         free(IO[t]);
         IO[t] = NULL;
     }
+    
+    queueCleanup(terminateQ, "terminateQ", error);
+    queueCleanup(readyQ, "readyQ", error);
+    queueCleanup(createQ, "createQ", error);
             
     int endidl = current->pid == idl->pid;
 //    printf("%lu %lu\n", current->pid, idl->pid);

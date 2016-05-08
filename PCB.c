@@ -36,7 +36,7 @@ REG_p REG_init(REG_p this, int *ptr_error) {
         this->reg.pc = DEFAULT_PC;
         this->reg.MAX_PC = rand() % (MAX_PC_RANGE + 1) + MAX_PC_MIN;
         this->reg.sw = DEFAULT_SW;
-        this->reg.term_count = 0;
+        this->reg.term_count = 0; //set to 0 for infinite process
         this->reg.TERMINATE = rand() % TERM_RANGE;
         for (t = 0; t < IO_NUMBER * IO_CALLS; t++)
             this->reg.IO_TRAPS[(int) (t / IO_CALLS)][t % IO_CALLS] = MIN_IO_CALL + (rand() % (this->reg.MAX_PC - MIN_IO_CALL));

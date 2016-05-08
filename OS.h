@@ -13,7 +13,6 @@
 #include <limits.h>
 #include <time.h>
 #include <pthread.h>
-//#include "lib.h"
 #include "FIFOq.h"
 #include "PCB.h"
 
@@ -21,7 +20,7 @@
 #define mutex pthread_mutex_t
 #define cond pthread_cond_t
 
-#define DEBUG false
+#define DEBUG true
 #define STACK_DEBUG false
 #define EXIT_STATUS_MESSAGE true
 #define OUTPUT true
@@ -42,8 +41,10 @@
 #define RUN_MIN_TIME 3000
 #define RUN_TIME_RANGE 1000
 
+#define OS_NO_ERROR EXIT_SUCCESS
 #define CPU_NULL_ERROR 71
 #define CPU_STACK_ERROR 73
+
 
 //note on style: ALLCAPS_lowercase is either a MUTEX_ variable or the data
 //               protected by the MUTEX_
@@ -55,6 +56,7 @@ struct CPU {
 struct io_thread_type {
     thread THREAD_io;
     mutex MUTEX_io;
+    cond COND_io;
     bool INTERRUPT_iocomplete;
     bool SHUTOFF_io;
     FIFOq_p waitingQ;

@@ -100,6 +100,7 @@ word 	PCB_getPc 		(PCB_p this, int *ptr_error);
 int 			PCB_setSw 		(PCB_p this, word sw); 
 word 	PCB_getSw 		(PCB_p this, int *ptr_error);
 char* 			PCB_toString 	(PCB_p this, char *str, int *ptr_error);
+char* 			Reg_File_toString (PCB_p this, char *str, int *ptr_error);
 int 			PCB_compareTo	(PCB_p this, PCB_p other, int *ptr_error);
 
 int 			PCB_test_main	(int argc, char** argv);

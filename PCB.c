@@ -265,8 +265,10 @@ char * PCB_toString(PCB_p this, char *str, int *ptr_error) {
     int error = (this == NULL || str == NULL) * PCB_NULL_ERROR;
     if (!error) {
         str[0] = '\0';
-        const char * format = "PID: 0x%04lx  PC: 0x%05lx  State: %s  Priority 0x%x";
-        snprintf(str, (size_t) PCB_TOSTRING_LEN - 1, format, this->pid, this->regs->reg.pc, STATE[this->state], this->priority);
+        char regString[PCB_TOSTRING_LEN - 1];
+        const char * format = "PID: 0x%04lx  PC: 0x%05lx  State: %s  Priority 0x%x  %s";
+        snprintf(str, (size_t) PCB_TOSTRING_LEN - 1, format, this->pid, this->regs->reg.pc, 
+                 STATE[this->state], this->priority, Reg_File_toString(this, regString, ptr_error));
     }
 
     if (ptr_error != NULL) {
@@ -274,4 +276,28 @@ char * PCB_toString(PCB_p this, char *str, int *ptr_error) {
     }
     return str;
 
+}
+
+/**
+ * Returns a string representing the contents of the regfile of the pcb. 
+ * Note: parameter string must be 80 chars or more. 
+ * @param this
+ * @param str
+ * @param int
+ * @return string representing the contents of the regfile.
+ */
+char * Reg_File_toString(PCB_p this, char *str, int *ptr_error) {
+    int error = (this == NULL || str == NULL) * PCB_NULL_ERROR;
+    if (!error) {
+        str[0] = '\0';
+        const char * format = "Max PC: 0x%05lx  Term Count:  0x%05lx  Terminate-on: 0x%05lx";
+        snprintf(str, (size_t) PCB_TOSTRING_LEN - 1, format, this->regs->reg.MAX_PC, 
+                this->regs->reg.term_count, this->regs->reg.TERMINATE);
+    }
+
+    if (ptr_error != NULL) {
+        *ptr_error += error;
+    }
+    return str;
+    
 }

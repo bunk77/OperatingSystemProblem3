@@ -64,7 +64,7 @@ int FIFOq_init(FIFOq_p this, int *error) {
  */
 int FIFOq_is_empty(FIFOq_p this, int *error) {
     if (!is_null(this, error)) {
-        return this->head == NULL;
+        return this->size > 0 ? 0 : 1;
     }
     return error == NULL ? 0 : *error;
 }
@@ -130,6 +130,7 @@ PCB_p FIFOq_dequeue(FIFOq_p this, int *error) {
         Node_destruct(node);
         return pcb;
     }
+    
     return NULL;
 }
 
@@ -155,7 +156,7 @@ char * FIFOq_toString(FIFOq_p this, char *str, int *stz, int *error) {
             int newline = 5;
             while (node != NULL) {
                 PCB_p pcb = node->data;
-                word pid = PCB_getPid(pcb, NULL);
+                word pid = PCB_getPid(pcb, error);
                 //alternate P1->P2-* scheme
 //                usedChars += snprintf(str + strlen(str), *stz - usedChars, "%cP%lu-", node == this->head? ' ' : '>', pid, PCB_toString);
                 usedChars += snprintf(str + strlen(str), *stz - usedChars, "> PID: 0x%04lx%c-", pid, (newline++ % 5) ? ' ' : '\n');

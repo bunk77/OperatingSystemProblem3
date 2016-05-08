@@ -82,7 +82,7 @@ void FIFOq_enqueue(FIFOq_p this, Node_p next, int *error) {
     if (!is_null(this, error) && !is_null(next, error)) {
 
         // an enqueued PCB is in the ready state
-        PCB_setState(next->data, 1);
+        //PCB_setState(next->data, 1);
 
         if (this->head == NULL) {
             if (!next->pos) {

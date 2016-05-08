@@ -14,14 +14,16 @@
 #include <time.h>
 #include <limits.h>
 
+#define word unsigned long
+/* DOESN'T DISPLAY WARNINGS THAT ARE DUE TO ULONG WORD CAST */
+//words are ulongs, silly
+#pragma GCC diagnostic ignored "-Wformat="
+
 #define created created_
 #define bool bool_
 #define true true_
 #define false false_
 
-#define word unsigned long
-
-//#define NUMREGS 16
 #define REGNUM (REG_COUNT + IO_NUMBER*IO_CALLS)
 #define PRIORITIES_TOTAL 16
 #define LOWEST_PRIORITY (PRIORITIES_TOTAL - 1)

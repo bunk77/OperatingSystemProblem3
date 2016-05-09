@@ -22,8 +22,8 @@
 #define cond pthread_cond_t
 
 //OUTPUT SETTINGS
-#define DEBUG true
-#define THREAD_DEBUG true
+#define DEBUG false
+#define THREAD_DEBUG false
 #define STACK_DEBUG false
 #define EXIT_STATUS_MESSAGE true
 #define OUTPUT true
@@ -36,7 +36,7 @@
 #define PCB_CREATE_EVERY false
 #define PCB_CREATE_FIRST false
 #define PCB_SCHEDULE_EVERY false
-#define PCB_CREATE_CHANCE (TIME_QUANTUM * 5)
+#define PCB_CREATE_CHANCE (TIME_QUANTUM * 50)
 #define RUN_MIN_TIME 3000
 #define RUN_TIME_RANGE 1000
 
@@ -49,7 +49,7 @@
 //SYSTEM DETAILS
 #define TIME_QUANTUM 300
 #define TIMER_SLEEP (TIME_QUANTUM * 1000)
-#define IO_SLEEP (TIME_QUANTUM * 5000)
+#define IO_SLEEP (TIME_QUANTUM * 1000)
 #define SYSSIZE 256
 
 //ERRORS

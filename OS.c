@@ -167,7 +167,9 @@ int mainLoopOS(int *error) {
         return *error;
     }
 
+    if (OUTPUT) printf("xxx\n");
     if (DEBUG) printf("Main loop begin\n");
+    
 
     /**************************************************************************/
     /*************************** MAIN LOOP OS *********************************/
@@ -258,24 +260,23 @@ int mainLoopOS(int *error) {
                 if (*pc == (*IO_TRAPS)[t / IO_CALLS][t % IO_CALLS]) {
                     t = t / IO_CALLS;
                     if (DEBUG) printf("Process %lu at PC %lu place in wQ of IO %d\n", current->pid, *pc, t);
-                    if (pthread_mutex_trylock(&(IO[t]->MUTEX_io))) {
-                        pthread_cond_wait(&(IO[t]->COND_io), &(IO[t]->MUTEX_io));
-                    }
-//                    pthread_cond_signal(&(IO[t]->COND_io));
+                    pthread_mutex_lock(&(IO[t]->MUTEX_io));
+                    //                    pthread_cond_signal(&(IO[t]->COND_io));
                     sysStackPush(CPU->regs, error);
                     trap_iohandler(t, error);
                     sysStackPop(CPU->regs, error);
-                    pthread_cond_signal(&(IO[t]->COND_io));
                     pthread_mutex_unlock(&(IO[t]->MUTEX_io));
+                    pthread_cond_signal(&(IO[t]->COND_io));
                     if (DEBUG) printf("At cycle PC = %lu, process %lu begins\n", *pc, current->pid);
                     break;
-                } else if (!pthread_mutex_trylock(&(IO[t / IO_CALLS]->MUTEX_io))) {
-                    if (IO[t / IO_CALLS]->INACTIVE_io) {
-                        IO[t / IO_CALLS]->INACTIVE_io = false;
-                        pthread_cond_signal(&(IO[t / IO_CALLS]->COND_io));
-                    }
-                    pthread_mutex_unlock(&(IO[t / IO_CALLS]->MUTEX_io));
-                }
+                } 
+//                else if (!pthread_mutex_trylock(&(IO[t / IO_CALLS]->MUTEX_io))) {
+//                    if (IO[t / IO_CALLS]->INACTIVE_io) {
+//                        IO[t / IO_CALLS]->INACTIVE_io = false;
+//                        pthread_cond_signal(&(IO[t / IO_CALLS]->COND_io));
+//                    }
+//                    pthread_mutex_unlock(&(IO[t / IO_CALLS]->MUTEX_io));
+//                }
             if (current != idl && current->pid > MAX_PROCESSES) {
                 if (EXIT_STATUS_MESSAGE) printf("post-trap: pcb with pid %lu exceeds max processes, exiting system\n", current->pid);
                 break;
@@ -356,59 +357,45 @@ void* io(void* tid) {
     
     
     do {
-        if (pthread_mutex_trylock(&(IO[t]->MUTEX_io))) {
-            pthread_cond_wait(&(IO[t]->COND_io), &(IO[t]->MUTEX_io));
-        }
-        pthread_cond_signal(&(IO[t]->COND_io));
-            
-
+        pthread_mutex_lock(&(IO[t]->MUTEX_io));
         shutoff = IO[t]->SHUTOFF_io;
-        if (!shutoff) {
-            IO[t]->INACTIVE_io = true;
-            pthread_cond_wait(&(IO[t]->COND_io), &(IO[t]->MUTEX_io));
-            pthread_cond_signal(&(IO[t]->COND_io));
-            
-            shutoff = IO[t]->SHUTOFF_io;
-            empty = FIFOq_is_empty(IO[t]->waitingQ, &io_error);
-        }
-        pthread_mutex_unlock(&MUTEX_timer);
-        pthread_cond_signal(&(IO[t]->COND_io));
+        empty = FIFOq_is_empty(IO[t]->waitingQ, &io_error);
+        pthread_mutex_unlock(&(IO[t]->MUTEX_io));
+//        if (!shutoff) {
+//            IO[t]->INACTIVE_io = true;
+//            
+//            shutoff = IO[t]->SHUTOFF_io;
+//        }
+
 
         while (!empty && !shutoff) {
 
             if (THREAD_DEBUG) printf("\t\tIO %d: queue has %d PCBs left; beginning IO ops\n", t, IO[t]->waitingQ->size);
 
             for(c = 0; c < IO_SLEEP; c++); //sleeping simulation
-
-            if (pthread_mutex_trylock(&(IO[t]->MUTEX_io))) {
-                pthread_cond_wait(&(IO[t]->COND_io), &(IO[t]->MUTEX_io));
-            }
-            pthread_cond_signal(&(IO[t]->COND_io));
             
-            shutoff = IO[t]->SHUTOFF_io;
-            
+            pthread_mutex_lock(&(IO[t]->MUTEX_io));
+            shutoff = IO[t]->SHUTOFF_io;        
 
             if (!shutoff) {
                 IO[t]->INTERRUPT_iocomplete = true;
-                IO[t]->INACTIVE_io = true;
-                pthread_cond_wait(&(IO[t]->COND_io), &(IO[t]->MUTEX_io));
-                pthread_cond_signal(&(IO[t]->COND_io));
-            
-                shutoff = IO[t]->SHUTOFF_io;
+                pthread_mutex_unlock(&(IO[t]->MUTEX_io));
+                pthread_cond_wait(&(IO[t]->COND_io), &(IO[t]->MUTEX_io));                
                 empty = FIFOq_is_empty(IO[t]->waitingQ, &io_error);
             }
 
-            pthread_mutex_unlock(&(IO[t]->MUTEX_io));
             if (THREAD_DEBUG) printf("\t\tIO %d: IO ops finished; queue has %d PCBs left, shutoff is %s\n", t, IO[t]->waitingQ->size, shutoff ? "true" : "false");
-            pthread_cond_signal(&(IO[t]->COND_io));
-
+            pthread_mutex_unlock(&(IO[t]->MUTEX_io));
+            
         }
+
+        if (empty && !shutoff)
+            pthread_cond_wait(&(IO[t]->COND_io), &(IO[t]->MUTEX_io));
+        pthread_mutex_unlock(&(IO[t]->MUTEX_io));
     } while (!shutoff);
     
     IO[t]->INACTIVE_io = true;
     if (THREAD_DEBUG) printf("\t\tIO %d: shutting off\n", t);
-    pthread_mutex_unlock(&(IO[t]->MUTEX_io));
-    pthread_cond_signal(&(IO[t]->COND_io));
     pthread_exit(NULL);
     return NULL;
 }
@@ -420,6 +407,9 @@ void* io(void* tid) {
 void trap_terminate(int* error) {
     sysStackPop(current->regs, error);
     current->state = terminated;
+    char pcbstr[PCB_TOSTRING_LEN];
+    if (OUTPUT) printf(">Terminated: %s\n", PCB_toString(current, pcbstr, error));
+
     FIFOq_enqueuePCB(terminateQ, current, error);
     //current = idl;
     
@@ -430,7 +420,7 @@ void trap_iohandler(const int t, int* error) {
     sysStackPop(current->regs, error);
     current->state = waiting;
     char pcbstr[PCB_TOSTRING_LEN];
-    if (THREAD_DEBUG) printf("\tIO %d added %s\n", t, PCB_toString(current, pcbstr, error));
+    if (OUTPUT) printf(">IO %d: added: %s\n", t, PCB_toString(current, pcbstr, error));
 
  
 //    if (pthread_mutex_trylock(&(IO[t]->MUTEX_io))) {
@@ -439,7 +429,7 @@ void trap_iohandler(const int t, int* error) {
     
     FIFOq_enqueuePCB(IO[t]->waitingQ, current, error);
     //current = idl;
-    if (THREAD_DEBUG) printf("\t\tIO %d gained PCB\n", t);
+    if (THREAD_DEBUG) printf("\t\tIO %d: gained PCB\n", t);
     //pthread_mutex_unlock(&(IO[t]->MUTEX_io));
     
     scheduler(error);
@@ -489,12 +479,12 @@ void isr_iocomplete(const int t, int* error) {
         pcb->state = ready;
         FIFOq_enqueuePCB(readyQ, pcb, error);
         char pcbstr[PCB_TOSTRING_LEN];
-        if (THREAD_DEBUG) printf("\t%s\n", PCB_toString(pcb, pcbstr, error));
+        if (OUTPUT) printf(">IO %d: complete: %s\n", t, PCB_toString(pcb, pcbstr, error));
 
-    }
+    } else if (THREAD_DEBUG) printf("ERROR! nothing to dequeue in IO %d\n", t);
 //    pthread_mutex_unlock(&(IO[t]->MUTEX_io));
-    IO[t]->INTERRUPT_iocomplete = false;
-    pthread_cond_signal(&(IO[t]->COND_io));
+//    IO[t]->INTERRUPT_iocomplete = false;
+//    pthread_cond_signal(&(IO[t]->COND_io));
 }
 
 /******************************************************************************/
@@ -512,7 +502,11 @@ void scheduler(int* error) {
     static int context_switch = 0;
 
     PCB_p temp;
-
+    PCB_p pcb = current;
+    bool pcb_idl = current == idl;
+    bool pcb_term = current->state == terminated;
+    bool pcb_io = current->state == waiting;
+    
     if (createQ == NULL) {
         *error += FIFO_NULL_ERROR;
         printf("%s", "ERROR: createQ is null");
@@ -539,6 +533,8 @@ void scheduler(int* error) {
     if (DEBUG) printf("createQ transferred to readyQ\n");
 
     if (readyQ->size < 2) {
+        if (pcb_term || pcb_io)
+            current = idl;
         PCB_setState(current, running);
         sysStackPush(current->regs, error);
         return;
@@ -551,8 +547,9 @@ void scheduler(int* error) {
         printf(">Switching to: %s\n", PCB_toString(readyQ->head->data, rdqstr, error));
     }
 
+    
 
-    if (current != idl && current->state != terminated && current->state != waiting) {
+    if (!pcb_idl && !pcb_term && !pcb_io) {
         current->state = ready;
         FIFOq_enqueuePCB(readyQ, current, error);
     } else idl->state = waiting;
@@ -562,7 +559,14 @@ void scheduler(int* error) {
         char runstr[PCB_TOSTRING_LEN];
         printf(">Now running: %s\n", PCB_toString(current, runstr, error));
         char rdqstr[PCB_TOSTRING_LEN];
-        printf(">Returned to ready queue: %s\n", PCB_toString(readyQ->tail->data, rdqstr, error));
+        if (!pcb_idl && !pcb_term && !pcb_io)
+            printf(">Returned to ready queue: %s\n", PCB_toString(readyQ->tail->data, rdqstr, error));
+        else if (pcb_idl)
+            printf(">Returned to ready queue: %s\n", PCB_toString(idl, rdqstr, error));
+        else if (pcb_term)
+            printf(">Last process terminated: %s\n", PCB_toString(terminateQ->tail->data, rdqstr, error));
+        else if (pcb_io)
+            printf(">Last process had io req: %s\n", PCB_toString(pcb, rdqstr, error));
         int stz = FIFOQ_TOSTRING_MAX;
         char str[stz];
         printf(">%s\n", FIFOq_toString(readyQ, str, &stz, error));

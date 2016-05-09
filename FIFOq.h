@@ -21,7 +21,7 @@
 #define NODE_STRING_ERROR 31
 #define NODE_DATA_ERROR 37
 
-#define FIFOQ_TOSTRING_MAX 4096
+#define FIFOQ_TOSTRING_MAX (PCB_TOSTRING_LEN * 100)
 
 typedef struct FIFOq * FIFOq_p;
 typedef struct Node_type Node;

@@ -6,6 +6,8 @@
 
 #include "FIFOq.h"
 
+static PCB_p null;
+
 /* Constructs you a boring empty FIFO queue and also intializes it.
  * 
  * error is the error pointer

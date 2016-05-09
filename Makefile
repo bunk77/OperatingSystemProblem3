@@ -9,4 +9,3 @@ FIFOq.o:
 
 PCB.o:
 	gcc -c PCB.c
-

@@ -33,13 +33,19 @@ REG_p REG_init(REG_p this, int *ptr_error) {
         *ptr_error += PCB_NULL_ERROR;
     else {
         int t;
+        int j;
         this->reg.pc = DEFAULT_PC;
-        this->reg.MAX_PC = rand() % (MAX_PC_RANGE + 1) + MAX_PC_MIN;
+        this->reg.MAX_PC = rand() % (MAX_PC_RANGE + 1 - MAX_PC_MIN) + MAX_PC_MIN;
         this->reg.sw = DEFAULT_SW;
         this->reg.term_count = 0; //set to 0 for infinite process
-        this->reg.TERMINATE = rand() % TERM_RANGE;
+        this->reg.TERMINATE = ((int)(rand() % 100 > TERM_INFINITE_CHANCE)) * (rand() % TERM_RANGE);
         for (t = 0; t < IO_NUMBER * IO_CALLS; t++)
             this->reg.IO_TRAPS[(int) (t / IO_CALLS)][t % IO_CALLS] = MIN_IO_CALL + (rand() % (this->reg.MAX_PC - MIN_IO_CALL));
+        for (t = 0; t < IO_NUMBER * IO_CALLS; t++)
+            for (j = 0; j < t; j++)
+                if (this->reg.IO_TRAPS[(int) (j / IO_CALLS)][j % IO_CALLS] == 
+                    this->reg.IO_TRAPS[(int) (t / IO_CALLS)][t % IO_CALLS])
+                    this->reg.IO_TRAPS[(int) (j / IO_CALLS)][j % IO_CALLS] = -1; //duplicate values erased
     }
     return this;
 }
@@ -265,12 +271,12 @@ char * PCB_toString(PCB_p this, char *str, int *ptr_error) {
     int error = (this == NULL || str == NULL) * PCB_NULL_ERROR;
     if (!error) {
         str[0] = '\0';
-        const char * format = "PID: 0x%04lx  PC: 0x%05lx  State: %s  Priority 0x%x";
-        snprintf(str, (size_t) PCB_TOSTRING_LEN - 1, format, this->pid, this->regs->reg.pc, STATE[this->state], this->priority);
-//+        char regString[PCB_TOSTRING_LEN - 1];
-//+        const char * format = "PID: 0x%04lx  PC: 0x%05lx  State: %s  Priority 0x%x  %s";
-//+        snprintf(str, (size_t) PCB_TOSTRING_LEN - 1, format, this->pid, this->regs->reg.pc, 
-//+                 STATE[this->state], this->priority, Reg_File_toString(this, regString, ptr_error));
+//        const char * format = "PID: 0x%04lx  PC: 0x%05lx  State: %s  Priority 0x%x";
+//        snprintf(str, (size_t) PCB_TOSTRING_LEN - 1, format, this->pid, this->regs->reg.pc, STATE[this->state], this->priority);
+        char regString[PCB_TOSTRING_LEN - 1];
+        const char * format = "PID: 0x%04lx  PC: 0x%05lx  State: %s  Priority 0x%x  %s";
+        snprintf(str, (size_t) PCB_TOSTRING_LEN - 1, format, this->pid, this->regs->reg.pc, 
+                 STATE[this->state], this->priority, Reg_File_toString(this->regs, regString, ptr_error));
     }
 
     if (ptr_error != NULL) {
@@ -280,25 +286,25 @@ char * PCB_toString(PCB_p this, char *str, int *ptr_error) {
 
 }
 
-//+/**
-//+ * Returns a string representing the contents of the regfile of the pcb. 
-//+ * Note: parameter string must be 80 chars or more. 
-//+ * @param this
-//+ * @param str
-//+ * @param int
-//+ * @return string representing the contents of the regfile.
-//+ */
-//+char * Reg_File_toString(PCB_p this, char *str, int *ptr_error) {
-//+    int error = (this == NULL || str == NULL) * PCB_NULL_ERROR;
-//+    if (!error) {
-//+        str[0] = '\0';
-//+        const char * format = "Max PC: 0x%05lx  Term Count:  0x%05lx  Terminate-on: 0x%05lx";
-//+        snprintf(str, (size_t) PCB_TOSTRING_LEN - 1, format, this->regs->reg.MAX_PC, 
-//+                this->regs->reg.term_count, this->regs->reg.TERMINATE);
-//+    }
-//+
-//+    if (ptr_error != NULL) {
-//+        *ptr_error += error;
-//+    }
-//+    return str;
-//+    
+/**
+ * Returns a string representing the contents of the regfile of the pcb. 
+ * Note: parameter string must be 80 chars or more. 
+ * @param this
+ * @param str
+ * @param int
+ * @return string representing the contents of the regfile.
+ */
+char * Reg_File_toString(REG_p this, char *str, int *ptr_error) {
+    int error = (this == NULL || str == NULL) * PCB_NULL_ERROR;
+    if (!error) {
+        str[0] = '\0';
+        const char * format = "Max PC: 0x%05lx  Term Count: 0x%05lx  Terminate-on: 0x%05lx";
+        snprintf(str, (size_t) PCB_TOSTRING_LEN - 1, format, this->reg.MAX_PC, 
+                this->reg.term_count, this->reg.TERMINATE);
+    }
+
+    if (ptr_error != NULL) {
+        *ptr_error += error;
+    }
+    return str;
+}    

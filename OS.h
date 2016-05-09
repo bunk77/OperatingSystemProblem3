@@ -28,8 +28,10 @@
 #define EXIT_STATUS_MESSAGE true
 #define OUTPUT true
 #define OUTPUT_CONTEXT_SWITCH 1
+#define FIRST_IO 1
 
 //PCB SETTINGS
+#define EXIT_ON_MAX_PROCESSES false
 #define MAX_PROCESSES 30
 #define MAX_NEW_PCB 5
 #define START_IDLE false
@@ -49,7 +51,8 @@
 //SYSTEM DETAILS
 #define TIME_QUANTUM 300
 #define TIMER_SLEEP (TIME_QUANTUM * 1000)
-#define IO_SLEEP (TIME_QUANTUM * 1000)
+#define IO_MAX_SLEEP (TIME_QUANTUM * 2000)
+#define IO_MIN_SLEEP (TIME_QUANTUM * 10)
 #define SYSSIZE 256
 
 //ERRORS
@@ -70,7 +73,6 @@ struct io_thread_type {
     thread THREAD_io;
     mutex MUTEX_io;
     cond COND_io;
-    bool INACTIVE_io;
     bool INTERRUPT_iocomplete;
     bool SHUTOFF_io;
     FIFOq_p waitingQ;

@@ -31,10 +31,11 @@
 #define IO_CALLS 4
 #define REG_COUNT 5
 
-#define MAX_PC_MIN 100
-#define MAX_PC_RANGE 2000
-#define TERM_RANGE 10
+#define MAX_PC_MIN 50
+#define MAX_PC_RANGE 3000
 #define MIN_IO_CALL 25
+#define TERM_RANGE 15
+#define TERM_INFINITE_CHANCE 10
 
 #define DEFAULT_STATE created
 #define DEFAULT_PC 0Lu
@@ -75,17 +76,6 @@ union regfile {
     word gpu[REGNUM];
 };
 
-//static const size_t REG_o[] = { 
-//  offsetof(REG, pc),
-//  offsetof(REG, MAX_PC),
-//  offsetof(REG, sw),
-//  offsetof(REG, term_count),
-//  offsetof(REG, TERMINATE),
-//  offsetof(REG, IO_TRAPS)
-//};
-
-
-
 PCB_p 			PCB_construct 	(int *ptr_error);
 PCB_p 			PCB_construct_init 	(int *ptr_error);
 int 			PCB_destruct 	(PCB_p this); 
@@ -105,6 +95,7 @@ char* 			PCB_toString 	(PCB_p this, char *str, int *ptr_error);
 int 			PCB_compareTo	(PCB_p this, PCB_p other, int *ptr_error);
 
 int 			PCB_test_main	(int argc, char** argv);
+char * Reg_File_toString(REG_p this, char *str, int *ptr_error);
 
 #endif
 

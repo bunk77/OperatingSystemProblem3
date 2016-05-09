@@ -6,7 +6,7 @@
 
 #include "OS.h"
 
-#define WRITE_TO_FILE true
+#define WRITE_TO_FILE false
 
 //static const word int REGNUM = sizeof(struct regfile)/sizeof(word);
 

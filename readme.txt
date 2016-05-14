@@ -1,5 +1,17 @@
 things to do:
 
+Mark
+	OS.c scheduling algorithm; priorityQ; createQ thread
+
+Bruno
+	PCB.c; PCB.h; add timeCreate/Terminate to PCB printout; IO bugfix
+
+Bun
+	communication of PCB and fthread, scheduler; new print statements
+
+Chris
+	fthread.c; fthread.h
+
 C pocket reference cuz there's a cow on the front
 
 5+ threads running:
@@ -46,6 +58,25 @@ scheduling? how do we simulate?
 		it has to call some kind of interrupt to scheduler
 		and the pcb itself does NOT go back into readyQ but into mutex queue
 
+
+SUPER SCHEDULER CHANGES
+	four priorities
+		level 0,  5% only CPU types, always run that first: round-robin
+		level 1, 80% all types, always run that first: round-robin and starvation watch
+		level 2, 10% all types, always run that first: round-robin and starvation watch
+		level 3,  5% all types, always run that first: round-robin and starvation watch
+
+	the scheduler every 10-20 schedulings will go through all processes in all levels and
+		check their internal last clock against current clock--any pcbs that have a
+		significant amount of difference are moved the the back of the next highest
+		readyQ
+
+	when the scheduler re-enqueues a process, it always puts it in its original priority level
+
+	if every a priority 0 process is ready to re-enter the queue, a special interrupt needs
+		to happen that immediately calls the scheduler to start running the priority 0
+		process	
+
 -----------------------------------------------
 PCB.c
 -----------------------------------------------
@@ -73,6 +104,7 @@ PCB now has 4 priority levels
 3 -  5%
 
 PCB new data fields
+last	clock at last time pcb was running
 type	which type
 pair	the pid of the paired PCB
 or index in global array of struct pcb pairs

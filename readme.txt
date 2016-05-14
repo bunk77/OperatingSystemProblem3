@@ -1,5 +1,17 @@
 things to do:
 
+Mark
+	OS.c scheduling algorithm; priorityQ; createQ thread
+
+Bruno
+	PCB.c; PCB.h; add timeCreate/Terminate to PCB printout; IO bugfix
+
+Bun
+	communication of PCB and fthread, scheduler; new print statements
+
+Chris
+	fthread.c; fthread.h
+
 C pocket reference cuz there's a cow on the front
 
 5+ threads running:
@@ -45,6 +57,14 @@ scheduling? how do we simulate?
 	if pcb checks lock and its partner has the lock, it goes into the waitingq in mutex
 		it has to call some kind of interrupt to scheduler
 		and the pcb itself does NOT go back into readyQ but into mutex queue
+
+
+SUPER SCHEDULER CHANGES
+	four priorities
+		level 0,  5% only CPU types, always run that first: round-robin
+		level 1, 80% all types, always run that first: round-robin and starvation watch
+		level 2, 10% all types, always run that first: round-robin and starvation watch
+		level 3,  5% all types, always run that first: round-robin and starvation watch
 
 -----------------------------------------------
 PCB.c

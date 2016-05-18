@@ -34,6 +34,8 @@ OS.c
 -----------------------------------------------
 create new thread for creating PCBs called void* user(void*)
 	need: mutexes to be shared with scheduler
+	does  not call scheduler--just enqueues to createQ
+	createQ should not overload timer, be roughly equal with
 
 create new thread for terminating as well?
 
@@ -73,9 +75,7 @@ SUPER SCHEDULER CHANGES
 
 	when the scheduler re-enqueues a process, it always puts it in its original priority level
 
-	if every a priority 0 process is ready to re-enter the queue, a special interrupt needs
-		to happen that immediately calls the scheduler to start running the priority 0
-		process	
+	there should be no special interrupts for when priority 0 gets enqueued--scheduler will take care of it	
 
 -----------------------------------------------
 PCB.c

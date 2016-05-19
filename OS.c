@@ -213,7 +213,7 @@ int mainLoopOS(int *error) {
             }
             
             /*** TIMER CHECK ***/
-            if (pthread_mutex_trylock(&MUTEX_timer)) {
+            if (!pthread_mutex_trylock(&MUTEX_timer)) { // *************************************************************************************************************
                 if (DEBUG) printf("Timer check \n");
                 bool context_switch = false;
                 if (INTERRUPT_timer) {
@@ -329,6 +329,7 @@ void* timer(void* unused) {
         } while (clock < next && !shutoff);
         pthread_mutex_lock(&MUTEX_timer);
         INTERRUPT_timer = true;
+        puts("TIMERINT#");
         next = clock_ + TIME_QUANTUM;      
         if (THREAD_DEBUG) printf("\tTIMER: begin clock at %lu\n", clock);  
         pthread_mutex_unlock(&MUTEX_timer);
@@ -359,9 +360,7 @@ void* io(void* tid) {
         shutoff = IO[t]->SHUTOFF_io;
         empty = FIFOq_is_empty(IO[t]->waitingQ, &io_error);
         pthread_mutex_unlock(&(IO[t]->MUTEX_io));
-
         while (!empty && !shutoff) {
-
             if (THREAD_DEBUG) printf("\t\tIO %d: queue has %d PCBs left; beginning IO ops\n", t + FIRST_IO, IO[t]->waitingQ->size);
             word sleep = rand() % (IO_MAX_SLEEP - IO_MIN_SLEEP) + IO_MIN_SLEEP;
             for(c = 0; c < sleep; c++); //sleeping simulation
@@ -380,7 +379,7 @@ void* io(void* tid) {
             pthread_mutex_unlock(&(IO[t]->MUTEX_io));
             
         }
-
+        pthread_mutex_lock(&(IO[t]->MUTEX_io));
         if (empty && !shutoff)
             pthread_cond_wait(&(IO[t]->COND_io), &(IO[t]->MUTEX_io));
         pthread_mutex_unlock(&(IO[t]->MUTEX_io));
@@ -405,7 +404,7 @@ void trap_terminate(int* error) {
 
     FIFOq_enqueuePCB(terminateQ, current, error);
     //current = idl;
-    
+    puts("TRAP TERMINATE*");    
     scheduler(error);
 }
 
@@ -417,7 +416,7 @@ void trap_iohandler(const int t, int* error) {
     
     FIFOq_enqueuePCB(IO[t]->waitingQ, current, error);
     if (THREAD_DEBUG) printf("\t\tIO %d: gained PCB\n", t + FIRST_IO);
-
+    printf("%d IO TRAP HANDLER\n", t);
     scheduler(error);
 }
 
@@ -453,7 +452,7 @@ void isr_timer(int* error) {
 
     if (DEBUG) printf("\t\tStack going to pop isrtimer: %d\n", SysPointer);
     sysStackPop(current->regs, error);
-
+    puts("ISR TIMER INTERUPT*");
     //call Scheduler and pass timer interrupt parameter
     scheduler(error);
 }
@@ -481,7 +480,7 @@ void isr_iocomplete(const int t, int* error) {
  * Then calls the dispatcher.
  */
 void scheduler(int* error) {
-
+    puts("IN SCHEDULER*******************"); 
     //for measuring every 4th output
     static int context_switch = 0;
 
@@ -515,7 +514,7 @@ void scheduler(int* error) {
     }
     
     if (DEBUG) printf("createQ transferred to readyQ\n");
-
+    //puts("BEFORE readyQ->size <2");
     if (readyQ->size < 2) {
         if (pcb_term || pcb_io)
             current = idl;
@@ -523,7 +522,8 @@ void scheduler(int* error) {
         sysStackPush(current->regs, error);
         return;
     }
-
+    //puts("AFTER readyQ->size <2");
+    
     if (!(context_switch % OUTPUT_CONTEXT_SWITCH)) {
         char pcbstr[PCB_TOSTRING_LEN];
         printf(">PCB: %s\n", PCB_toString(current, pcbstr, error));

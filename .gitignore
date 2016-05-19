@@ -1,5 +1,8 @@
 # Created by https://www.gitignore.io/api/c++,windows,osx,linux
 
+### output file ###
+*.txt
+
 ### C++ ###
 # Compiled Object files
 *.slo

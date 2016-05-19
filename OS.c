@@ -213,7 +213,7 @@ int mainLoopOS(int *error) {
             }
             
             /*** TIMER CHECK ***/
-            if (pthread_mutex_trylock(&MUTEX_timer)) {
+            if (!pthread_mutex_trylock(&MUTEX_timer)) { 
                 if (DEBUG) printf("Timer check \n");
                 bool context_switch = false;
                 if (INTERRUPT_timer) {
@@ -224,9 +224,11 @@ int mainLoopOS(int *error) {
                 if (context_switch || PCB_SCHEDULE_EVERY) {
                     if (DEBUG) printf("At cycle PC = %lu, timer interrupts %lu\n", *pc, current->pid);
                     sysStackPush(CPU->regs, error);
+                    
                     interrupt(INTERRUPT_TIMER, NULL, error);
                     sysStackPop(CPU->regs, error);
                     if (DEBUG) printf("At cycle PC = %lu, process %lu begins\n", *pc, current->pid);
+                    continue;
                 }
                 if (DEBUG) printf("No cycle PC \n");
             }
@@ -359,9 +361,7 @@ void* io(void* tid) {
         shutoff = IO[t]->SHUTOFF_io;
         empty = FIFOq_is_empty(IO[t]->waitingQ, &io_error);
         pthread_mutex_unlock(&(IO[t]->MUTEX_io));
-
         while (!empty && !shutoff) {
-
             if (THREAD_DEBUG) printf("\t\tIO %d: queue has %d PCBs left; beginning IO ops\n", t + FIRST_IO, IO[t]->waitingQ->size);
             word sleep = rand() % (IO_MAX_SLEEP - IO_MIN_SLEEP) + IO_MIN_SLEEP;
             for(c = 0; c < sleep; c++); //sleeping simulation
@@ -380,7 +380,8 @@ void* io(void* tid) {
             pthread_mutex_unlock(&(IO[t]->MUTEX_io));
             
         }
-
+        pthread_mutex_lock(&(IO[t]->MUTEX_io));
+        empty = FIFOq_is_empty(IO[t]->waitingQ, &io_error);
         if (empty && !shutoff)
             pthread_cond_wait(&(IO[t]->COND_io), &(IO[t]->MUTEX_io));
         pthread_mutex_unlock(&(IO[t]->MUTEX_io));
@@ -405,7 +406,6 @@ void trap_terminate(int* error) {
 
     FIFOq_enqueuePCB(terminateQ, current, error);
     //current = idl;
-    
     scheduler(error);
 }
 
@@ -417,7 +417,6 @@ void trap_iohandler(const int t, int* error) {
     
     FIFOq_enqueuePCB(IO[t]->waitingQ, current, error);
     if (THREAD_DEBUG) printf("\t\tIO %d: gained PCB\n", t + FIRST_IO);
-
     scheduler(error);
 }
 
@@ -446,6 +445,7 @@ void interrupt(const int INTERRUPT, void* args, int* error) {
  * the CPU state to it before calling the scheduler.
  */
 void isr_timer(int* error) {
+    
     //change the state from running to interrupted
     PCB_setState(current, interrupted);
 
@@ -481,7 +481,6 @@ void isr_iocomplete(const int t, int* error) {
  * Then calls the dispatcher.
  */
 void scheduler(int* error) {
-
     //for measuring every 4th output
     static int context_switch = 0;
 
@@ -490,7 +489,6 @@ void scheduler(int* error) {
     bool pcb_idl = current == idl;
     bool pcb_term = current->state == terminated;
     bool pcb_io = current->state == waiting;
-    
     if (createQ == NULL) {
         *error += FIFO_NULL_ERROR;
         printf("%s", "ERROR: createQ is null");
@@ -513,9 +511,7 @@ void scheduler(int* error) {
             printf(">Enqueued to ready queue: %s\n", PCB_toString(temp, pcbstr, error));
         }
     }
-    
     if (DEBUG) printf("createQ transferred to readyQ\n");
-
     if (readyQ->size < 2) {
         if (pcb_term || pcb_io)
             current = idl;
@@ -523,7 +519,7 @@ void scheduler(int* error) {
         sysStackPush(current->regs, error);
         return;
     }
-
+    
     if (!(context_switch % OUTPUT_CONTEXT_SWITCH)) {
         char pcbstr[PCB_TOSTRING_LEN];
         printf(">PCB: %s\n", PCB_toString(current, pcbstr, error));
@@ -532,7 +528,6 @@ void scheduler(int* error) {
     }
 
     
-
     if (!pcb_idl && !pcb_term && !pcb_io) {
         current->state = ready;
         FIFOq_enqueuePCB(readyQ, current, error);
@@ -558,7 +553,6 @@ void scheduler(int* error) {
     }
 
     //"housekeeping"
-
 }
 
 /* Dispatches a new current process by dequeuing the head of the ready queue,
@@ -730,7 +724,6 @@ void cleanup(int* error) {
     queueCleanup(createQ, "createQ", error);
 
     int endidl = current->pid == idl->pid;
-    //    printf("%lu %lu\n", current->pid, idl->pid);
     if (idl != NULL) {
         if (EXIT_STATUS_MESSAGE) {
             char pcbstr[PCB_TOSTRING_LEN];
@@ -760,7 +753,6 @@ void queueCleanup(FIFOq_p queue, char *qstr, int *error) {
         printf(">%s", FIFOq_toString(queue, str, &stz, error));
     }
     
-//    if (EXIT_STATUS_MESSAGE)    printf("queue is empty? %d\n", FIFOq_is_empty(queue, error));
     if (queue->size) {
         if (EXIT_STATUS_MESSAGE) {
             printf("\n>System exited with non-empty %s\n", qstr);
@@ -775,7 +767,6 @@ void queueCleanup(FIFOq_p queue, char *qstr, int *error) {
             } else printf("IDL!!!!!!!!!!\n");
 
         }
-//        if (EXIT_STATUS_MESSAGE) printf("------------------------------------------------queue cleanup successful\n");
     } else if (EXIT_STATUS_MESSAGE) printf(" empty\n");
     FIFOq_destruct(queue, error);
 }
@@ -808,3 +799,6 @@ void nanosleeptest() {
         i++;
     }
 }
+
+
+

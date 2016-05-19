@@ -14,11 +14,9 @@
 #include <time.h>
 #include <limits.h>
 
-#define word unsigned long
 /* DOESN'T DISPLAY WARNINGS THAT ARE DUE TO ULONG WORD CAST */
 //words are ulongs, silly
-#pragma GCC diagnostic ignored "-Wformat="
-
+//#pragma GCC diagnostic ignored "-Wformat="
 #define created created_
 #define bool bool_
 #define true true_
@@ -52,6 +50,7 @@ enum state_type {created = 0, ready, running, interrupted, waiting, terminated};
 
 
 //typedef struct pcb PCB;
+typedef unsigned long word;
 typedef struct PCB * PCB_p;
 typedef struct CPU * CPU_p;
 typedef union regfile REG;

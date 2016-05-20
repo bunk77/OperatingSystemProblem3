@@ -481,8 +481,6 @@ void isr_iocomplete(const int t, int* error) {
  * Then calls the dispatcher.
  */
 void scheduler(int* error) {
-    //for measuring every 4th output
-    static int context_switch = 0;
 
     PCB_p temp;
     PCB_p pcb = current;
@@ -491,13 +489,13 @@ void scheduler(int* error) {
     bool pcb_io = current->state == waiting;
     if (createQ == NULL) {
         *error += FIFO_NULL_ERROR;
-        printf("%s", "ERROR: createQ is null");
+        puts("ERROR: createQ is null");
         return;
     }
     
     if (readyQ == NULL) {
         *error += FIFO_NULL_ERROR;
-        printf("%s", "ERROR: readyQ is null");
+        puts("ERROR: readyQ is null");
         return;
     }
 
@@ -520,12 +518,10 @@ void scheduler(int* error) {
         return;
     }
     
-    if (!(context_switch % OUTPUT_CONTEXT_SWITCH)) {
-        char pcbstr[PCB_TOSTRING_LEN];
-        printf(">PCB: %s\n", PCB_toString(current, pcbstr, error));
-        char rdqstr[PCB_TOSTRING_LEN];
-        printf(">Switching to: %s\n", PCB_toString(readyQ->head->data, rdqstr, error));
-    }
+    char pcbstr[PCB_TOSTRING_LEN];
+    printf(">PCB: %s\n", PCB_toString(current, pcbstr, error));
+    char rdqstr[PCB_TOSTRING_LEN];
+    printf(">Switching to: %s\n", PCB_toString(readyQ->head->data, rdqstr, error));
 
     
     if (!pcb_idl && !pcb_term && !pcb_io) {
@@ -534,25 +530,23 @@ void scheduler(int* error) {
     } else idl->state = waiting;
     dispatcher(error);
 
-    if (!(context_switch % 4)) {
-        char runstr[PCB_TOSTRING_LEN];
-        printf(">Now running: %s\n", PCB_toString(current, runstr, error));
-        char rdqstr[PCB_TOSTRING_LEN];
-        if (!pcb_idl && !pcb_term && !pcb_io)
-            printf(">Returned to ready queue: %s\n", PCB_toString(readyQ->tail->data, rdqstr, error));
-        else if (pcb_idl)
-            printf(">Idle process switch run: %s\n", PCB_toString(idl, rdqstr, error));
-        else if (pcb_term)
-            printf(">Last process terminated: %s\n", PCB_toString(terminateQ->tail->data, rdqstr, error));
-        else if (pcb_io)
-            printf(">Requested I/O operation: %s\n", PCB_toString(pcb, rdqstr, error));
-        int stz = FIFOQ_TOSTRING_MAX;
-        char str[stz];
-        printf(">%s\n", FIFOq_toString(readyQ, str, &stz, error));
-
+    char runstr[PCB_TOSTRING_LEN];
+    printf(">Now running: %s\n", PCB_toString(current, runstr, error));
+    char rdqstr[PCB_TOSTRING_LEN];
+    if (!pcb_idl && !pcb_term && !pcb_io) {
+        printf(">Returned to ready queue: %s\n", PCB_toString(readyQ->tail->data, rdqstr, error));
+    } else if (pcb_idl) {
+        printf(">Idle process switch run: %s\n", PCB_toString(idl, rdqstr, error));
+    } else if (pcb_term) {
+        printf(">Last process terminated: %s\n", PCB_toString(terminateQ->tail->data, rdqstr, error));
+    } else if (pcb_io) {
+        printf(">Requested I/O operation: %s\n", PCB_toString(pcb, rdqstr, error));
     }
+    int stz = FIFOQ_TOSTRING_MAX;
+    char str[stz];
+    printf(">%s\n", FIFOq_toString(readyQ, str, &stz, error));
 
-    //"housekeeping"
+
 }
 
 /* Dispatches a new current process by dequeuing the head of the ready queue,
@@ -562,7 +556,7 @@ void dispatcher(int* error) {
 
     if (readyQ == NULL) {
         *error += FIFO_NULL_ERROR;
-        printf("%s", "ERROR: readyQ is null");
+        puts("ERROR: readyQ is null");
     } else if (!FIFOq_is_empty(readyQ, error)) { //dequeue the head of readyQueue
         current = FIFOq_dequeue(readyQ, error);
     } else {
@@ -640,18 +634,20 @@ int createPCBs(int *error) {
 int sysStackPush(REG_p fromRegs, int* error) {
     int r;
 
-    for (r = 0; r < REGNUM; r++)
+    for (r = 0; r < REGNUM; r++) {
         if (SysPointer >= SYSSIZE - 1) {
             *error += CPU_STACK_ERROR;
             printf("ERROR: Sysstack exceeded\n");
-        } else
+        } else {
             SysStack[SysPointer++] = fromRegs->gpu[r];
-
+        }
+    }
     int i;
-    if (STACK_DEBUG)
+    if (STACK_DEBUG) {
         for (i = 0; i <= SysPointer; i++) {
             printf("\tPostPush SysStack[%d] = %lu\n", i, SysStack[i]);
         }
+    }
 }
 
 int sysStackPop(REG_p toRegs, int* error) {
@@ -691,7 +687,7 @@ void cleanup(int* error) {
     pthread_cond_signal(&COND_timer);
     if (THREAD_DEBUG) printf("timer shutoff signal sent\n");
     pthread_join(THREAD_timer, NULL);
-    //...
+
     if (THREAD_DEBUG) printf("timer shutoff successful\n");
     pthread_mutex_destroy(&MUTEX_timer);
     pthread_cond_destroy(&COND_timer);
@@ -702,7 +698,6 @@ void cleanup(int* error) {
         wQ[9] = t + '0';
         pthread_cond_signal(&(IO[t]->COND_io));
 
-//        while (pthread_mutex_trylock(&(IO[t]->MUTEX_io)));
         pthread_mutex_lock(&(IO[t]->MUTEX_io));
         
         IO[t]->SHUTOFF_io = true;
@@ -764,7 +759,7 @@ void queueCleanup(FIFOq_p queue, char *qstr, int *error) {
                 if (EXIT_STATUS_MESSAGE) printf("\t%s\n", PCB_toString(pcb, pcbstr, error));
                 PCB_destruct(pcb);
 
-            } else printf("IDL!!!!!!!!!!\n");
+            } else puts("IDL!!!!!!!!!");
 
         }
     } else if (EXIT_STATUS_MESSAGE) printf(" empty\n");
@@ -776,12 +771,10 @@ void queueCleanup(FIFOq_p queue, char *qstr, int *error) {
  */
 void stackCleanup() {
     int i;
-    if (SysPointer > 0) {
-        if (EXIT_STATUS_MESSAGE) {
-            printf("System exited with non-empty stack\n");
-            for (i = 0; i <= SysPointer; i++) {
-                printf("\tSysStack[%d] = %lu\n", i, SysStack[i]);
-            }
+    if (SysPointer > 0 && EXIT_STATUS_MESSAGE) {
+        printf("System exited with non-empty stack\n");
+        for (i = 0; i <= SysPointer; i++) {
+            printf("\tSysStack[%d] = %lu\n", i, SysStack[i]);
         }
     }
 }

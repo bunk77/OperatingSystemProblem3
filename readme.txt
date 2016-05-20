@@ -4,7 +4,7 @@ Mark
 	OS.c scheduling algorithm; priorityQ; createQ thread
 
 Bruno
-	PCB.c; PCB.h; add timeCreate/Terminate to PCB printout; IO bugfix
+	PCB.c; PCB.h; add timeCreate/Terminate to PCB printout
 
 Bun
 	communication of PCB and fthread, scheduler; new print statements

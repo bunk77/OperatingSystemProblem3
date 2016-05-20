@@ -30,7 +30,7 @@ static io_thread IO[IO_NUMBER];
 static PCB_p current;
 static PCB_p idl;
 static FIFOq_p createQ;
-static FIFOq_p readyQ;
+static FIFOq_p readyQ[PRIORITIES_TOTAL];
 static FIFOq_p terminateQ;
 
 /* Launches the OS. Sets default values, initializes idle process and calls the
@@ -118,7 +118,8 @@ int bootOS() {
 
     //queues
     createQ = FIFOq_construct(&boot_error);
-    readyQ = FIFOq_construct(&boot_error);
+    for (t = 0; t < PRIORITIES_TOTAL; t++)
+        readyQ[t] = FIFOq_construct(&boot_error);
     terminateQ = FIFOq_construct(&boot_error);
 
     return boot_error;
@@ -463,7 +464,7 @@ void isr_iocomplete(const int t, int* error) {
     if (!FIFOq_is_empty(IO[t]->waitingQ, error)) {
         PCB_p pcb = FIFOq_dequeue(IO[t]->waitingQ, error);
         pcb->state = ready;
-        FIFOq_enqueuePCB(readyQ, pcb, error);
+        FIFOq_enqueuePCB(readyQ[pcb->priority], pcb, error);
         char pcbstr[PCB_TOSTRING_LEN];
         if (OUTPUT) printf(">I/O %d: complete: %s\n", t + FIRST_IO, PCB_toString(pcb, pcbstr, error));
 
@@ -484,11 +485,13 @@ void scheduler(int* error) {
     //for measuring every 4th output
     static int context_switch = 0;
 
+//    PCB_p previous = current;
     PCB_p temp;
     PCB_p pcb = current;
     bool pcb_idl = current == idl;
     bool pcb_term = current->state == terminated;
     bool pcb_io = current->state == waiting;
+    
     if (createQ == NULL) {
         *error += FIFO_NULL_ERROR;
         printf("%s", "ERROR: createQ is null");
@@ -505,15 +508,24 @@ void scheduler(int* error) {
     while (!FIFOq_is_empty(createQ, error)) {
         temp = FIFOq_dequeue(createQ, error);
         temp->state = ready;
-        FIFOq_enqueuePCB(readyQ, temp, error);
+        FIFOq_enqueuePCB(readyQ[temp->priority], temp, error);
         if (OUTPUT) {
             char pcbstr[PCB_TOSTRING_LEN];
-            printf(">Enqueued to ready queue: %s\n", PCB_toString(temp, pcbstr, error));
+            printf(">Enqueued to ready queue %hu: %s\n", temp->priority, PCB_toString(temp, pcbstr, error));
         }
     }
+    
     if (DEBUG) printf("createQ transferred to readyQ\n");
-    if (readyQ->size < 2) {
-        if (pcb_term || pcb_io)
+    
+    int r;
+    for (r = 0; r < PRIORITIES_TOTAL; r++)
+        if (!FIFOq_is_empty(readyQ[r], error)) {
+            printf("readyQ %d had %d size\n", r, readyQ[r]->size);
+            break;
+        }
+    
+    if (r == PRIORITIES_TOTAL) {// ||current->pid == readyQ[r]->head->data->pid) { //nothing in any ready queues
+        if (pcb_term || pcb_io) //or in locks or conds
             current = idl;
         PCB_setState(current, running);
         sysStackPush(current->regs, error);
@@ -524,13 +536,13 @@ void scheduler(int* error) {
         char pcbstr[PCB_TOSTRING_LEN];
         printf(">PCB: %s\n", PCB_toString(current, pcbstr, error));
         char rdqstr[PCB_TOSTRING_LEN];
-        printf(">Switching to: %s\n", PCB_toString(readyQ->head->data, rdqstr, error));
+        printf(">Switching to: %s\n", PCB_toString(readyQ[r]->head->data, rdqstr, error));
     }
 
     
-    if (!pcb_idl && !pcb_term && !pcb_io) {
+    if (!pcb_idl && !pcb_term && !pcb_io) { //add stuff about locks and conds
         current->state = ready;
-        FIFOq_enqueuePCB(readyQ, current, error);
+        FIFOq_enqueuePCB(readyQ[current->priority], current, error);
     } else idl->state = waiting;
     dispatcher(error);
 
@@ -539,7 +551,8 @@ void scheduler(int* error) {
         printf(">Now running: %s\n", PCB_toString(current, runstr, error));
         char rdqstr[PCB_TOSTRING_LEN];
         if (!pcb_idl && !pcb_term && !pcb_io)
-            printf(">Returned to ready queue: %s\n", PCB_toString(readyQ->tail->data, rdqstr, error));
+            if (readyQ[r]->size >= 2) //can we get this to work with tail? size 1
+                printf(">Returned to ready queue: %s\n", PCB_toString(readyQ[r]->tail->data, rdqstr, error));
         else if (pcb_idl)
             printf(">Idle process switch run: %s\n", PCB_toString(idl, rdqstr, error));
         else if (pcb_term)
@@ -548,7 +561,7 @@ void scheduler(int* error) {
             printf(">Requested I/O operation: %s\n", PCB_toString(pcb, rdqstr, error));
         int stz = FIFOQ_TOSTRING_MAX;
         char str[stz];
-        printf(">%s\n", FIFOq_toString(readyQ, str, &stz, error));
+        printf(">%s\n", FIFOq_toString(readyQ[r], str, &stz, error));
 
     }
 
@@ -560,14 +573,17 @@ void scheduler(int* error) {
  */
 void dispatcher(int* error) {
 
+    int r;
+    
     if (readyQ == NULL) {
         *error += FIFO_NULL_ERROR;
         printf("%s", "ERROR: readyQ is null");
-    } else if (!FIFOq_is_empty(readyQ, error)) { //dequeue the head of readyQueue
-        current = FIFOq_dequeue(readyQ, error);
-    } else {
-        current = idl;
-    }
+    } else
+        for (r = 0; r < PRIORITIES_TOTAL; r++)
+            if (!FIFOq_is_empty(readyQ[r], error)) { //dequeue the head of readyQueue
+                current = FIFOq_dequeue(readyQ[r], error);
+                break;
+            }
 
     //change current's state to running point
     current->state = running;
@@ -720,7 +736,12 @@ void cleanup(int* error) {
     }
 
     queueCleanup(terminateQ, "terminateQ", error);
-    queueCleanup(readyQ, "readyQ", error);
+    int r;
+    char qustr[16];
+    for (r = 0; r < PRIORITIES_TOTAL; r++) {
+        sprintf(qustr, "readyQ[%d]", r);
+        queueCleanup(readyQ[r], qustr, error);
+    }
     queueCleanup(createQ, "createQ", error);
 
     int endidl = current->pid == idl->pid;

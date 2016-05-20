@@ -23,7 +23,7 @@
 #define false false_
 
 #define REGNUM (REG_COUNT + IO_NUMBER*IO_CALLS)
-#define PRIORITIES_TOTAL 16
+#define PRIORITIES_TOTAL 4
 #define LOWEST_PRIORITY (PRIORITIES_TOTAL - 1)
 #define IO_NUMBER 2
 #define IO_CALLS 4

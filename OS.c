@@ -532,7 +532,6 @@ void scheduler(int* error) {
 
     char runstr[PCB_TOSTRING_LEN];
     printf(">Now running: %s\n", PCB_toString(current, runstr, error));
-    char rdqstr[PCB_TOSTRING_LEN];
     if (!pcb_idl && !pcb_term && !pcb_io) {
         printf(">Returned to ready queue: %s\n", PCB_toString(readyQ->tail->data, rdqstr, error));
     } else if (pcb_idl) {

@@ -519,10 +519,8 @@ void scheduler(int* error) {
     
     int r;
     for (r = 0; r < PRIORITIES_TOTAL; r++)
-        if (!FIFOq_is_empty(readyQ[r], error)) {
-            printf("readyQ %d had %d size\n", r, readyQ[r]->size);
+        if (!FIFOq_is_empty(readyQ[r], error))
             break;
-        }
     
     if (r == PRIORITIES_TOTAL) {// ||current->pid == readyQ[r]->head->data->pid) { //nothing in any ready queues
         if (pcb_term || pcb_io) //or in locks or conds
@@ -551,8 +549,10 @@ void scheduler(int* error) {
         printf(">Now running: %s\n", PCB_toString(current, runstr, error));
         char rdqstr[PCB_TOSTRING_LEN];
         if (!pcb_idl && !pcb_term && !pcb_io)
-            if (readyQ[r]->size >= 2) //can we get this to work with tail? size 1
+            if (readyQ[r]->size > 1)
                 printf(">Returned to ready queue: %s\n", PCB_toString(readyQ[r]->tail->data, rdqstr, error));
+            else
+                printf(">No process return required.\n");
         else if (pcb_idl)
             printf(">Idle process switch run: %s\n", PCB_toString(idl, rdqstr, error));
         else if (pcb_term)

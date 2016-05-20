@@ -2,6 +2,7 @@
 
 ### output file ###
 *.txt
+!readme.txt
 
 ### C++ ###
 # Compiled Object files

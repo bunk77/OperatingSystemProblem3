@@ -142,13 +142,14 @@ int mainLoopOS(int *error) {
 
     sysStackPush(current->regs, error);
     if (STACK_DEBUG) printf("current max_pc is %lu\n", current->regs->reg.MAX_PC);
-    const CPU_p CPU = (CPU_p) malloc(sizeof (struct CPU));
+    const CPU_p const CPU = (CPU_p) malloc(sizeof (struct CPU));
     CPU->regs = (REG_p) malloc(sizeof (union regfile));
     REG_init(CPU->regs, error);
     if (STACK_DEBUG) printf("pre max_pc is %lu\n", CPU->regs->reg.MAX_PC);
     sysStackPop(CPU->regs, error);
     if (STACK_DEBUG) printf("post max_pc is %lu\n", CPU->regs->reg.MAX_PC);
-
+    
+    //alias CPU's registers
     word * const pc = &(CPU->regs->reg.pc);
     word * const MAX_PC = &(CPU->regs->reg.MAX_PC);
     word * const sw = &(CPU->regs->reg.sw);

@@ -1,16 +1,19 @@
 things to do:
 
 Mark
-	OS.c: add starvation check for loop, PCB creation types/intensity; createQ thread
+	createQ thread
 
 Bruno
-	PCB.c; PCB.h; add timeCreate/Terminate to PCB printout
+	PCB.c; PCB.h; add timeCreate/Terminate to PCB printout; OS.c: add starvation check for loop
 
 Bun
 	communication of PCB and fthread, scheduler; new print statements
 
 Chris
 	fthread.c; fthread.h
+
+Daniel
+        understand system; OS.c: add starvation check for loop
 
 C pocket reference cuz there's a cow on the front
 

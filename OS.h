@@ -25,6 +25,7 @@
 #define DEBUG false
 #define THREAD_DEBUG false
 #define STACK_DEBUG false
+#define CREATEPCB_DEBUG false
 #define EXIT_STATUS_MESSAGE true
 #define OUTPUT true
 #define OUTPUT_CONTEXT_SWITCH 1
@@ -42,6 +43,7 @@
 #define RUN_MIN_TIME 3000
 #define RUN_TIME_RANGE 1000
 #define STARVATION_CHECK_FREQUENCY 20
+#define STARVATION_CLOCK_LIMIT 25000
 
 //INTERRUPT CODES
 #define NO_INTERRUPT 9999

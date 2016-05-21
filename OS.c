@@ -119,8 +119,10 @@ int bootOS() {
     }
 
     //idl pcb has special parameters
-    idl = PCB_construct_init(&boot_error);
+    idl = PCB_construct(&boot_error);
     idl->pid = ULONG_MAX;
+    idl->io = false;
+    idl->type = undefined;
     idl->priority = LOWEST_PRIORITY;
     idl->state = waiting;
     idl->timeCreate = 0;
@@ -278,20 +280,21 @@ int mainLoopOS(int *error) {
             }
             
             /*** PCB TRAPS CHECK ***/
-            for (t = 0; t < IO_NUMBER * IO_CALLS; t++)
-                 if (*pc == (*IO_TRAPS)[t / IO_CALLS][t % IO_CALLS]) {
-                    t = t / IO_CALLS;
-                    if (DEBUG) printf("Process %lu at PC %lu place in wQ of IO %d\n", current->pid, *pc, t + FIRST_IO);
-                    pthread_mutex_lock(&(IO[t]->MUTEX_io));
-                    
-                    sysStackPush(CPU->regs, error);
-                    trap_iohandler(t, error);
-                    sysStackPop(CPU->regs, error);
-                    pthread_mutex_unlock(&(IO[t]->MUTEX_io));
-                    pthread_cond_signal(&(IO[t]->COND_io));
-                    if (DEBUG) printf("At cycle PC = %lu, process %lu begins\n", *pc, current->pid);
-                    break;
-                } 
+            if (current->io)
+                for (t = 0; t < IO_NUMBER * IO_CALLS; t++)
+                     if (*pc == (*IO_TRAPS)[t / IO_CALLS][t % IO_CALLS]) {
+                        t = t / IO_CALLS;
+                        if (DEBUG) printf("Process %lu at PC %lu place in wQ of IO %d\n", current->pid, *pc, t + FIRST_IO);
+                        pthread_mutex_lock(&(IO[t]->MUTEX_io));
+
+                        sysStackPush(CPU->regs, error);
+                        trap_iohandler(t, error);
+                        sysStackPop(CPU->regs, error);
+                        pthread_mutex_unlock(&(IO[t]->MUTEX_io));
+                        pthread_cond_signal(&(IO[t]->COND_io));
+                        if (DEBUG) printf("At cycle PC = %lu, process %lu begins\n", *pc, current->pid);
+                        break;
+                    } 
             if (current != idl && current->pid > MAX_PROCESSES) {
                 if (EXIT_STATUS_MESSAGE) printf("post-trap: pcb with pid %lu exceeds max processes, exiting system\n", current->pid);
                 break;
@@ -318,7 +321,7 @@ int mainLoopOS(int *error) {
     sysStackPush(CPU->regs, error);
     sysStackPop(current->regs, error);
 
-    if (EXIT_STATUS_MESSAGE) printf("\n>OS System Clock at Exit: %lu\n", clock_);
+    if (EXIT_STATUS_MESSAGE) printf("\n>OS System Clock at Exit: %lu\n\n\n", clock_);
 
 //    for(t = 0; t < TIMER_SLEEP; t++);
     
@@ -556,10 +559,16 @@ void scheduler(int* error) {
     schedules++;
     current->lastClock = clock_;
     
+//    int r;
 //    int p;
 //    if (!(schedules % STARVATION_CHECK_FREQUENCY))
-//        for (p = 0; p < PRIORITIES_TOTAL; p++)
-//            
+//        for (r = 0; r < PRIORITIES_TOTAL; r++)
+//            if (!FIFOq_is_empty(readyQ[r])) {
+//                PCB_p pcb = readyQ[r]->head->data;
+//                for (p = 0; r < readyQ[r]->size; r++)
+//                    if (clock_ - pcb->lastClock > STARVATION_CLOCK_LIMIT)
+//                        
+//            }        
     
     
     if (!(context_switch % OUTPUT_CONTEXT_SWITCH) && OUTPUT) {
@@ -647,8 +656,7 @@ int createPCBs(int *error) {
     int i;
     int r = rand() % (MAX_NEW_PCB + 1);
     char buffer[PCB_TOSTRING_LEN];
-    
-    
+        
     if (r + processes_created >= MAX_PROCESSES) {
         r = MAX_PROCESSES - processes_created;
     }
@@ -664,19 +672,33 @@ int createPCBs(int *error) {
         return *error;
     }
 
-    if (DEBUG) printf("createPCBs: creating %d PCBs and enqueueing them to createQ\n", r);
+    if (CREATEPCB_DEBUG) printf("createPCBs: creating up to %d PCBs and enqueueing them to createQ\n", r);
     for (i = 0; i < r; i++) {
+        
+        if (!PCBs_available()) {
+            r = i;
+            if (CREATEPCB_DEBUG) printf("all pcbs used up; %d pcbs created\n", r);
+            break;
+        }
         // PCB_construct initializes state to 0 (created)
         PCB_p newPcb = PCB_construct_init(error);
+        
+        if (newPcb->type == undefined)
+            *error += PCB_UNDEFINED_ERROR;
+        
         newPcb->timeCreate = clock_;
+        newPcb->lastClock = clock_;
         closeable += newPcb->regs->reg.TERMINATE > 0;
-        if (DEBUG) printf("New PCB created: %s\n", PCB_toString(newPcb, buffer, error));
+        
+        
+        
+        if (CREATEPCB_DEBUG) printf("New PCB created: %s\n", PCB_toString(newPcb, buffer, error));
         FIFOq_enqueuePCB(createQ, newPcb, error);
         processes_created++;
     }
-    if (DEBUG) printf("PCBs all created\n");
+    if (CREATEPCB_DEBUG) printf("PCBs all created\n");
     if (!first_batch) first_batch = r;
-    if (DEBUG) printf("total created pcbs: %d and exit = %d\n", processes_created, (processes_created >= MAX_PROCESSES ? -1 : 0));
+    if (CREATEPCB_DEBUG) printf("total created pcbs: %d and exit = %d\n", processes_created, (processes_created >= MAX_PROCESSES ? -1 : 0));
     return (processes_created >= MAX_PROCESSES ? -2 : 0);
 }
 
@@ -726,6 +748,8 @@ int sysStackPop(REG_p toRegs, int* error) {
 /******************************************************************************/
 
 void cleanup(int* error) {
+    
+    if (EXIT_STATUS_MESSAGE) printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n\n");
 
     int t;
     int s;
@@ -743,6 +767,7 @@ void cleanup(int* error) {
     pthread_mutex_destroy(&MUTEX_timer);
     pthread_cond_destroy(&COND_timer);
 
+    queueCleanup(terminateQ, "terminateQ", error);
     
     for (t = 0; t < IO_NUMBER; t++) {
         char wQ[12] = "waitingQ_x";
@@ -766,7 +791,6 @@ void cleanup(int* error) {
         IO[t] = NULL;
     }
 
-    queueCleanup(terminateQ, "terminateQ", error);
     int r;
     char qustr[16];
     for (r = 0; r < PRIORITIES_TOTAL; r++) {

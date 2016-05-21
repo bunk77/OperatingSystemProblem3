@@ -22,9 +22,18 @@
 #define true true_
 #define false false_
 
+#define max(x,y) (  ((x) > (y)) ? (x) : (y)  )
+#define min(x,y) (  ((x) < (y)) ? (x) : (y)  )
+
 #define REGNUM (REG_COUNT + IO_NUMBER*IO_CALLS)
 #define PRIORITIES_TOTAL 4
 #define LOWEST_PRIORITY (PRIORITIES_TOTAL - 1)
+#define PRIORITY_0_CHANCE 5  //must be defined
+#define PRIORITY_1_CHANCE 80
+#define PRIORITY_2_CHANCE 10
+#define PRIORITY_3_CHANCE 5
+#define PRIORITY_OTHER_CHANCE 0
+#define PRIORITY_UNIQUE_UPTO 3
 #define IO_NUMBER 2
 #define IO_CALLS 4
 #define REG_COUNT 5
@@ -33,7 +42,12 @@
 #define MAX_PC_RANGE 3000
 #define MIN_IO_CALL 25
 #define TERM_RANGE 15
-#define TERM_INFINITE_CHANCE 10
+#define TERM_INFINITE_CHANCE 0
+
+#define CPU_ONLY_MAX 25
+#define IO_ONLY_MAX 50
+#define PROCON_PAIR_MAX 10   //x2; pair count
+#define MUTUAL_PAIR_MAX 10   //x2; pair count
 
 #define DEFAULT_STATE created
 #define DEFAULT_PC 0Lu
@@ -42,11 +56,14 @@
 #define PCB_NULL_ERROR 5
 #define PCB_INIT_ERROR 7
 #define PCB_OTHER_ERROR 41
+#define PCB_PRIORITY_ERROR 569
 
 #define PCB_TOSTRING_LEN 180
 
 typedef enum {false, true} bool;
 enum state_type {created = 0, ready, running, interrupted, waiting, terminated};
+
+enum process_type {regular = 0, producer, consumer, mutual_A, mutual_B};
 
 
 //typedef struct pcb PCB;
@@ -60,11 +77,13 @@ struct PCB {
   REG_p regs;
   //separate from sysStack--don't push/pop  
   word pid;        // process ID #, a unique number
+  bool io;               // io or cpu intensive
+  enum process_type type;   // thread relation to other processes
   unsigned short priority;  // priorities 0=highest, LOWEST_PRIORITY=lowest
   enum state_type state;    // process state (running, waiting, etc.)
   word timeCreate;
   word timeTerminate;
-  
+  word lastClock;           // for starvation check
 };
 
 union regfile {

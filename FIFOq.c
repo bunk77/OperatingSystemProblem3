@@ -150,12 +150,13 @@ char * FIFOq_toString(FIFOq_p this, char *str, int *stz, int *error) {
     int usedChars = 0;
     if (!is_null(this, error) && !is_null(str, error)) {
         char pcbstr[PCB_TOSTRING_LEN];
-        usedChars += snprintf(str, *stz - usedChars, "Head:");
+                                                    // ">I/O %d added:     %s\n"
+        usedChars += snprintf(str, *stz - usedChars, "Head:           ");
         if (this->head != NULL) {
             Node_p node = this->head;
-            usedChars += snprintf(str + strlen(str), *stz - usedChars, " %s -", PCB_toString(node->data, pcbstr, error));
+            usedChars += snprintf(str + strlen(str), *stz - usedChars, " %s\n-", PCB_toString(node->data, pcbstr, error));
             node = node->next_node;
-            int newline = 5;
+            int newline = 1;
             while (node != NULL) {
                 PCB_p pcb = node->data;
                 word pid = PCB_getPid(pcb, error);

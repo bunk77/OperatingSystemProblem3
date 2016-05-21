@@ -1,7 +1,7 @@
 things to do:
 
 Mark
-	OS.c scheduling algorithm; priorityQ; createQ thread
+	OS.c scheduling algorithm; createQ thread
 
 Bruno
 	PCB.c; PCB.h; add timeCreate/Terminate to PCB printout
@@ -23,8 +23,6 @@ C pocket reference cuz there's a cow on the front
 
 todo:
     comment everything
-    bugfix: chance of lockup on IO on most recent update: about 10%?
-	right after I/O adds a process, system locks up (no timer, so all locked)
     add timeCreate, timeTerminate to pcb printout
     simulate timer interrupt in isr, traps that aren't timer related
 	simulate interrupt hierarchy?
@@ -41,8 +39,8 @@ create new thread for terminating as well?
 
 new checks for the mutex/cond arrays
 
-bunch of new static coutners for PCB types and totals
-	shceduler add to readyQ ++
+bunch of new static counters for PCB types and totals
+	scheduler add to readyQ ++
 	terminate deletion --
 
 parallel global array containing pcb pro-con structs and integer resource
@@ -64,7 +62,7 @@ scheduling? how do we simulate?
 SUPER SCHEDULER CHANGES
 	four priorities
 		level 0,  5% only CPU types, always run that first: round-robin
-		level 1, 80% all types, always run that first: round-robin and starvation watch
+		level 1, 80% all types, always run th at first: round-robin and starvation watch
 		level 2, 10% all types, always run that first: round-robin and starvation watch
 		level 3,  5% all types, always run that first: round-robin and starvation watch
 
@@ -86,8 +84,8 @@ IO Processes		50 max
 CPU Processes		25 max
 Producer Processes	10 max	
 Consumer Processes	10 max
-Mutual 2R A Processes	? max
-Mutual 2R B Processes	? max
+Mutual 2R A Processes	10 max
+Mutual 2R B Processes	10 max
 
 struct pair {
 	pcbA

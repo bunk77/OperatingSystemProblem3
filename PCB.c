@@ -8,6 +8,7 @@
 
 //struct and error defines originally here
 char *STATE[] = {"created", "ready", "running", "interrupted", "waiting", "terminated"};
+char *TYPE[] = {"regular", "producer", "consumer", "mutual_A", "mutual_B"};
 
 /**
  * Returns a pcb pointer to heap allocation.
@@ -38,7 +39,7 @@ REG_p REG_init(REG_p this, int *ptr_error) {
         this->reg.MAX_PC = rand() % (MAX_PC_RANGE + 1 - MAX_PC_MIN) + MAX_PC_MIN;
         this->reg.sw = DEFAULT_SW;
         this->reg.term_count = 0; //set to 0 for infinite process
-        this->reg.TERMINATE = ((int)(rand() % 100 > TERM_INFINITE_CHANCE)) * (rand() % TERM_RANGE);
+        this->reg.TERMINATE = ((int)(rand() % 100 >= TERM_INFINITE_CHANCE)) * (rand() % TERM_RANGE + 1);
         for (t = 0; t < IO_NUMBER * IO_CALLS; t++)
             this->reg.IO_TRAPS[(int) (t / IO_CALLS)][t % IO_CALLS] = MIN_IO_CALL + (rand() % (this->reg.MAX_PC - MIN_IO_CALL));
         for (t = 0; t < IO_NUMBER * IO_CALLS; t++)
@@ -77,6 +78,9 @@ int PCB_destruct(PCB_p this) {
  * @return 
  */
 int PCB_init(PCB_p this) {
+    static int PRIORITIES[] = {PRIORITY_0_CHANCE, PRIORITY_1_CHANCE,
+                               PRIORITY_2_CHANCE, PRIORITY_3_CHANCE,
+                               PRIORITY_OTHER_CHANCE};
     static word pidCounter = ULONG_MAX;
     static int firstCall = 1;
     if (!firstCall) {
@@ -86,12 +90,26 @@ int PCB_init(PCB_p this) {
     int error = (this == NULL) * PCB_NULL_ERROR;
     int t;
     if (!error) {
-        REG_init(this->regs, &error);
         this->pid = ++pidCounter;
-        this->priority = rand() & LOWEST_PRIORITY;
+        this->io = true;
+        this->type = regular;
+        int chance = rand() % 100;
+        int percent = 0;
+        int priority;
+        this->priority = -1;
+        for (priority = 0; priority < PRIORITIES_TOTAL; priority++) {
+            percent += PRIORITIES[min(priority, PRIORITY_UNIQUE_UPTO)];
+            if (chance < percent) {
+                this->priority = priority;
+                break;
+            }
+            //printf("\npid: %lu chance: %d percent %d priority: %d\n", this->pid, chance, percent, priority);
+        }
+        if (this->priority < 0) error += PCB_PRIORITY_ERROR;
         this->state = DEFAULT_STATE;
         this->timeCreate = clock();
         this->timeTerminate = 0;
+        REG_init(this->regs, &error);
     }
     return error;
 }
@@ -274,9 +292,10 @@ char * PCB_toString(PCB_p this, char *str, int *ptr_error) {
 //        const char * format = "PID: 0x%04lx  PC: 0x%05lx  State: %s  Priority 0x%x";
 //        snprintf(str, (size_t) PCB_TOSTRING_LEN - 1, format, this->pid, this->regs->reg.pc, STATE[this->state], this->priority);
         char regString[PCB_TOSTRING_LEN - 1];
-        const char * format = "PID: 0x%04lx  PC: 0x%05lx  State: %s  Priority 0x%x  %s";
+        const char * format = "PID: 0x%04lx  PC: 0x%05lx  State: %s  Priority: 0x%x  Intensity: %s  Type: %s  %s";
         snprintf(str, (size_t) PCB_TOSTRING_LEN - 1, format, this->pid, this->regs->reg.pc, 
-                 STATE[this->state], this->priority, Reg_File_toString(this->regs, regString, ptr_error));
+                 STATE[this->state], this->priority, this->io? "IO" : "CPU", TYPE[this->type],
+                 Reg_File_toString(this->regs, regString, ptr_error));
     }
 
     if (ptr_error != NULL) {

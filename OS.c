@@ -399,11 +399,11 @@ void* io(void* tid) {
 
 void trap_terminate(int* error) {
     sysStackPop(current->regs, error);
-    current->state = terminated;
+    PCB_setState(current, terminated); //this is the ONLY PLACE a pcb should ever be terminated
     current->timeTerminate = clock_;
     closeable--;
     char pcbstr[PCB_TOSTRING_LEN];
-    if (OUTPUT) printf(">Terminated: %s\n", PCB_toString(current, pcbstr, error));
+    if (OUTPUT) printf(">Terminated:       %s\n", PCB_toString(current, pcbstr, error));
 
     FIFOq_enqueuePCB(terminateQ, current, error);
     //current = idl;
@@ -414,7 +414,7 @@ void trap_iohandler(const int t, int* error) {
     sysStackPop(current->regs, error);
     current->state = waiting;
     char pcbstr[PCB_TOSTRING_LEN];
-    if (OUTPUT) printf(">I/O %d: added: %s\n", t + FIRST_IO, PCB_toString(current, pcbstr, error));
+    if (OUTPUT) printf(">I/O %d added:     %s\n", t + FIRST_IO, PCB_toString(current, pcbstr, error));
     
     FIFOq_enqueuePCB(IO[t]->waitingQ, current, error);
     if (THREAD_DEBUG) printf("\t\tIO %d: gained PCB\n", t + FIRST_IO);
@@ -466,7 +466,7 @@ void isr_iocomplete(const int t, int* error) {
         pcb->state = ready;
         FIFOq_enqueuePCB(readyQ[pcb->priority], pcb, error);
         char pcbstr[PCB_TOSTRING_LEN];
-        if (OUTPUT) printf(">I/O %d: complete: %s\n", t + FIRST_IO, PCB_toString(pcb, pcbstr, error));
+        if (OUTPUT) printf(">I/O %d complete:  %s\n", t + FIRST_IO, PCB_toString(pcb, pcbstr, error));
 
     } else if (THREAD_DEBUG) printf("ERROR! nothing to dequeue in IO %d\n", t);
 
@@ -511,7 +511,7 @@ void scheduler(int* error) {
         FIFOq_enqueuePCB(readyQ[temp->priority], temp, error);
         if (OUTPUT) {
             char pcbstr[PCB_TOSTRING_LEN];
-            printf(">Enqueued to ready queue %hu: %s\n", temp->priority, PCB_toString(temp, pcbstr, error));
+            printf(">Enqueued readyQ: %s\n", PCB_toString(temp, pcbstr, error));
         }
     }
     
@@ -530,11 +530,11 @@ void scheduler(int* error) {
         return;
     }
     
-    if (!(context_switch % OUTPUT_CONTEXT_SWITCH)) {
+    if (!(context_switch % OUTPUT_CONTEXT_SWITCH) && OUTPUT) {
         char pcbstr[PCB_TOSTRING_LEN];
-        printf(">PCB: %s\n", PCB_toString(current, pcbstr, error));
+        printf(">PCB:             %s\n", PCB_toString(current, pcbstr, error));
         char rdqstr[PCB_TOSTRING_LEN];
-        printf(">Switching to: %s\n", PCB_toString(readyQ[r]->head->data, rdqstr, error));
+        printf(">Switching to:    %s\n", PCB_toString(readyQ[r]->head->data, rdqstr, error));
     }
 
     
@@ -544,21 +544,21 @@ void scheduler(int* error) {
     } else idl->state = waiting;
     dispatcher(error);
 
-    if (!(context_switch % 4)) {
+    if (!(context_switch % OUTPUT_CONTEXT_SWITCH) && OUTPUT) {
         char runstr[PCB_TOSTRING_LEN];
-        printf(">Now running: %s\n", PCB_toString(current, runstr, error));
+        printf(">Now running:     %s\n", PCB_toString(current, runstr, error));
         char rdqstr[PCB_TOSTRING_LEN];
         if (!pcb_idl && !pcb_term && !pcb_io)
             if (readyQ[r]->size > 1)
-                printf(">Returned to ready queue: %s\n", PCB_toString(readyQ[r]->tail->data, rdqstr, error));
+                printf(">Requeued readyQ: %s\n", PCB_toString(readyQ[r]->tail->data, rdqstr, error));
             else
                 printf(">No process return required.\n");
         else if (pcb_idl)
-            printf(">Idle process switch run: %s\n", PCB_toString(idl, rdqstr, error));
+            printf(">Idle process:    %s\n", PCB_toString(idl, rdqstr, error));
         else if (pcb_term)
-            printf(">Last process terminated: %s\n", PCB_toString(terminateQ->tail->data, rdqstr, error));
+            printf(">Exited system:   %s\n", PCB_toString(terminateQ->tail->data, rdqstr, error));
         else if (pcb_io)
-            printf(">Requested I/O operation: %s\n", PCB_toString(pcb, rdqstr, error));
+            printf(">Requested I/O:   %s\n", PCB_toString(pcb, rdqstr, error));
         int stz = FIFOQ_TOSTRING_MAX;
         char str[stz];
         printf(">%s\n", FIFOq_toString(readyQ[r], str, &stz, error));

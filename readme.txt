@@ -1,7 +1,7 @@
 things to do:
 
 Mark
-	OS.c scheduling algorithm; createQ thread
+	OS.c: add starvation check for loop, PCB creation types/intensity; createQ thread
 
 Bruno
 	PCB.c; PCB.h; add timeCreate/Terminate to PCB printout
@@ -62,7 +62,7 @@ scheduling? how do we simulate?
 SUPER SCHEDULER CHANGES
 	four priorities
 		level 0,  5% only CPU types, always run that first: round-robin
-		level 1, 80% all types, always run th at first: round-robin and starvation watch
+		level 1, 80% all types, always run that first: round-robin and starvation watch
 		level 2, 10% all types, always run that first: round-robin and starvation watch
 		level 3,  5% all types, always run that first: round-robin and starvation watch
 

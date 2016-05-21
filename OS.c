@@ -38,33 +38,52 @@ static FIFOq_p terminateQ;
  * any errors encountered.
  */
 int main(void) {
-
-    if (DEBUG) printf("Main begin\n");
-
-//    nanosleeptest();
     
-    if (WRITE_TO_FILE) {
-        freopen("scheduleTrace.txt", "w", stdout);
+    int run;
+    word errors[SYSTEM_RUNS] = {0};
+    
+    if (SYSTEM_RUNS < 1) printf("NO SYSTEM RUN SET\n");
+    
+    for (run = 1; run <= SYSTEM_RUNS; run++) {
+        
+        if (EXIT_STATUS_MESSAGE) printf("\nSYSTEM START RUN %d of %d\n\n", run, SYSTEM_RUNS);
+        if (DEBUG) printf("Main begin\n");
+
+    //    nanosleeptest();
+
+        if (WRITE_TO_FILE) {
+            freopen("scheduleTrace.txt", "w", stdout);
+        }
+
+        int base_error = bootOS();
+        if (DEBUG) printf("OS booted\n");
+
+        int exit = mainLoopOS(&base_error);
+        if (DEBUG) printf("OS shutdown\n");
+
+        stackCleanup();
+
+        if (base_error) {
+            if (EXIT_STATUS_MESSAGE || OUTPUT) printf("\n>System exited with error %d\n", base_error);
+        } else {
+            if (EXIT_STATUS_MESSAGE) printf("\n>System exited without incident\n");
+            if (OUTPUT)
+                if (EXIT_ON_MAX_PROCESSES && exit == -2) printf("\n>%d processes have been created so system has exited\n", MAX_PROCESSES);
+                else if (SHUTDOWN && exit == -SHUTDOWN) printf("\n>%d cycles have run so system has exited\n", SHUTDOWN);
+                else printf("\n>Of %d processes created, all terminable ones have terminated so system has exited\n", MAX_PROCESSES);
+        }
+        
+        errors[run-1] = base_error;
+        if (EXIT_STATUS_MESSAGE) printf("\nSYSTEM END RUN %d of %d\n\n", run, SYSTEM_RUNS);
+        int d;
+        if (EXIT_STATUS_MESSAGE)
+            for (d = 0; d < 4; d++) printf("---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\n");
     }
-
-    int base_error = bootOS();
-    if (DEBUG) printf("OS booted\n");
-
-    mainLoopOS(&base_error);
-    if (DEBUG) printf("OS shutdown\n");
-
-    stackCleanup();
-
-    if (base_error) {
-        if (EXIT_STATUS_MESSAGE || OUTPUT) printf("\n>System exited with error %d\n", base_error);
-    } else {
-        if (EXIT_STATUS_MESSAGE) printf("\n>System exited without incident\n");
-        if (OUTPUT)
-            if (EXIT_ON_MAX_PROCESSES) printf("\n>%d processes have been created so system has exited\n", MAX_PROCESSES);
-            else printf("\n>Of %d processes created, all terminable ones have terminated so system has exited\n", MAX_PROCESSES);
-    }
-
-    return base_error;
+    
+    word mass_error = 0;
+    for (run = 0; run < SYSTEM_RUNS; run++)
+        mass_error += errors[run];
+    return mass_error;
 
 }
 
@@ -164,7 +183,7 @@ int mainLoopOS(int *error) {
         return *error;
     }
 
-    if (OUTPUT) printf(">OS System Clock at Start %lu\n\n", clock_);
+    if (EXIT_STATUS_MESSAGE) printf(">OS System Clock at Start %lu\n\n", clock_);
     if (DEBUG) printf("Main loop begin\n");
     
 
@@ -287,6 +306,9 @@ int mainLoopOS(int *error) {
                 exit = -1;
             else exit = 0;
         
+        if (SHUTDOWN && clock_ >= SHUTDOWN)
+            exit = -SHUTDOWN;
+        
     } while (!*error && !exit);
     /**************************************************************************/
     /*************************** *********** **********************************/
@@ -296,13 +318,13 @@ int mainLoopOS(int *error) {
     sysStackPush(CPU->regs, error);
     sysStackPop(current->regs, error);
 
-    if (EXIT_STATUS_MESSAGE) printf("\nOS System Clock at Exit: %lu\n", clock_);
+    if (EXIT_STATUS_MESSAGE) printf("\n>OS System Clock at Exit: %lu\n", clock_);
 
 //    for(t = 0; t < TIMER_SLEEP; t++);
     
     cleanup(error);
 
-    return *error;
+    return exit;
 }
 
 /******************************************************************************/
@@ -484,6 +506,7 @@ void isr_iocomplete(const int t, int* error) {
 void scheduler(int* error) {
     //for measuring every 4th output
     static int context_switch = 0;
+    static int schedules = 0;
 
 //    PCB_p previous = current;
     PCB_p temp;
@@ -530,6 +553,15 @@ void scheduler(int* error) {
         return;
     }
     
+    schedules++;
+    current->lastClock = clock_;
+    
+//    int p;
+//    if (!(schedules % STARVATION_CHECK_FREQUENCY))
+//        for (p = 0; p < PRIORITIES_TOTAL; p++)
+//            
+    
+    
     if (!(context_switch % OUTPUT_CONTEXT_SWITCH) && OUTPUT) {
         char pcbstr[PCB_TOSTRING_LEN];
         printf(">PCB:             %s\n", PCB_toString(current, pcbstr, error));
@@ -537,7 +569,6 @@ void scheduler(int* error) {
         printf(">Switching to:    %s\n", PCB_toString(readyQ[r]->head->data, rdqstr, error));
     }
 
-    
     if (!pcb_idl && !pcb_term && !pcb_io) { //add stuff about locks and conds
         current->state = ready;
         FIFOq_enqueuePCB(readyQ[current->priority], current, error);
@@ -646,7 +677,7 @@ int createPCBs(int *error) {
     if (DEBUG) printf("PCBs all created\n");
     if (!first_batch) first_batch = r;
     if (DEBUG) printf("total created pcbs: %d and exit = %d\n", processes_created, (processes_created >= MAX_PROCESSES ? -1 : 0));
-    return (processes_created >= MAX_PROCESSES ? -1 : 0);
+    return (processes_created >= MAX_PROCESSES ? -2 : 0);
 }
 
 /******************************************************************************/

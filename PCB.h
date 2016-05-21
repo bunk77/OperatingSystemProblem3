@@ -41,7 +41,7 @@
 #define MAX_PC_MIN 50
 #define MAX_PC_RANGE 3000
 #define MIN_IO_CALL 25
-#define TERM_RANGE 15
+#define TERM_RANGE 10
 #define TERM_INFINITE_CHANCE 0
 
 #define CPU_ONLY_MAX 25

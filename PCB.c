@@ -92,7 +92,7 @@ int PCB_init(PCB_p this) {
         int chance, percent, priority, type;
         
         this->pid = ++pidCounter;
-
+        this->attentionCount = 0;
         //IO and type determination
         int type_chance[LAST_PAIR+1];
         percent = 0;

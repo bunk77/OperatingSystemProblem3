@@ -88,6 +88,7 @@ struct PCB {
   word timeCreate;
   word timeTerminate;
   word lastClock;           // for starvation check
+  word attentionCount;      //times it has been given upgraded attention
 };
 
 union regfile {

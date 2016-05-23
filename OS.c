@@ -489,6 +489,7 @@ void isr_iocomplete(const int t, int* error) {
     if (!FIFOq_is_empty(IO[t]->waitingQ, error)) {
         PCB_p pcb = FIFOq_dequeue(IO[t]->waitingQ, error);
         pcb->state = ready;
+        pcb->lastClock = clock_; //to track starvation
         FIFOq_enqueuePCB(readyQ[pcb->priority], pcb, error);
         char pcbstr[PCB_TOSTRING_LEN];
         if (OUTPUT) printf(">I/O %d complete:  %s\n", t + FIRST_IO, PCB_toString(pcb, pcbstr, error));
@@ -534,6 +535,7 @@ void scheduler(int* error) {
     while (!FIFOq_is_empty(createQ, error)) {
         temp = FIFOq_dequeue(createQ, error);
         temp->state = ready;
+        temp->lastClock = clock_;
         FIFOq_enqueuePCB(readyQ[temp->priority], temp, error);
         if (OUTPUT) {
             char pcbstr[PCB_TOSTRING_LEN];
@@ -577,9 +579,10 @@ void scheduler(int* error) {
         char rdqstr[PCB_TOSTRING_LEN];
         printf(">Switching to:    %s\n", PCB_toString(readyQ[r]->head->data, rdqstr, error));
     }
-
+    //if it's a timer interrupt
     if (!pcb_idl && !pcb_term && !pcb_io) { //add stuff about locks and conds
         current->state = ready;
+        current->lastClock = clock_;
         FIFOq_enqueuePCB(readyQ[current->priority], current, error);
     } else idl->state = waiting;
     dispatcher(error);

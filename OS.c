@@ -608,7 +608,7 @@ void scheduler(int* error) {
     }
     int stz = FIFOQ_TOSTRING_MAX;
     char str[stz];
-    //printf(">%s\n", FIFOq_toString(readyQ, str, &stz, error));
+    printf(">%s\n", FIFOq_toString(readyQ[r], str, &stz, error));
 
 
 }

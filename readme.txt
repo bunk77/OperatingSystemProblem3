@@ -1,16 +1,19 @@
 things to do:
 
 Mark
-	OS.c scheduling algorithm; priorityQ; createQ thread
+	createQ thread
 
 Bruno
-	PCB.c; PCB.h; add timeCreate/Terminate to PCB printout; IO bugfix
+	PCB.c; PCB.h; add timeCreate/Terminate to PCB printout; OS.c: add starvation check for loop
 
 Bun
 	communication of PCB and fthread, scheduler; new print statements
 
 Chris
 	fthread.c; fthread.h
+
+Daniel
+        understand system; OS.c: add starvation check for loop
 
 C pocket reference cuz there's a cow on the front
 
@@ -23,8 +26,6 @@ C pocket reference cuz there's a cow on the front
 
 todo:
     comment everything
-    bugfix: chance of lockup on IO on most recent update: about 10%?
-	right after I/O adds a process, system locks up (no timer, so all locked)
     add timeCreate, timeTerminate to pcb printout
     simulate timer interrupt in isr, traps that aren't timer related
 	simulate interrupt hierarchy?
@@ -41,8 +42,8 @@ create new thread for terminating as well?
 
 new checks for the mutex/cond arrays
 
-bunch of new static coutners for PCB types and totals
-	shceduler add to readyQ ++
+bunch of new static counters for PCB types and totals
+	scheduler add to readyQ ++
 	terminate deletion --
 
 parallel global array containing pcb pro-con structs and integer resource
@@ -86,8 +87,8 @@ IO Processes		50 max
 CPU Processes		25 max
 Producer Processes	10 max	
 Consumer Processes	10 max
-Mutual 2R A Processes	? max
-Mutual 2R B Processes	? max
+Mutual 2R A Processes	10 max
+Mutual 2R B Processes	10 max
 
 struct pair {
 	pcbA

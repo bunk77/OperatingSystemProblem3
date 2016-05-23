@@ -30,7 +30,7 @@ static io_thread IO[IO_NUMBER];
 static PCB_p current;
 static PCB_p idl;
 static FIFOq_p createQ;
-static FIFOq_p readyQ;
+static FIFOq_p readyQ[PRIORITIES_TOTAL];
 static FIFOq_p terminateQ;
 
 /* Launches the OS. Sets default values, initializes idle process and calls the
@@ -38,33 +38,52 @@ static FIFOq_p terminateQ;
  * any errors encountered.
  */
 int main(void) {
-
-    if (DEBUG) printf("Main begin\n");
-
-//    nanosleeptest();
     
-    if (WRITE_TO_FILE) {
-        freopen("scheduleTrace.txt", "w", stdout);
+    int run;
+    word errors[SYSTEM_RUNS] = {0};
+    
+    if (SYSTEM_RUNS < 1) printf("NO SYSTEM RUN SET\n");
+    
+    for (run = 1; run <= SYSTEM_RUNS; run++) {
+        
+        if (EXIT_STATUS_MESSAGE) printf("\nSYSTEM START RUN %d of %d\n\n", run, SYSTEM_RUNS);
+        if (DEBUG) printf("Main begin\n");
+
+    //    nanosleeptest();
+
+        if (WRITE_TO_FILE) {
+            freopen("scheduleTrace.txt", "w", stdout);
+        }
+
+        int base_error = bootOS();
+        if (DEBUG) printf("OS booted\n");
+
+        int exit = mainLoopOS(&base_error);
+        if (DEBUG) printf("OS shutdown\n");
+
+        stackCleanup();
+
+        if (base_error) {
+            if (EXIT_STATUS_MESSAGE || OUTPUT) printf("\n>System exited with error %d\n", base_error);
+        } else {
+            if (EXIT_STATUS_MESSAGE) printf("\n>System exited without incident\n");
+            if (OUTPUT)
+                if (EXIT_ON_MAX_PROCESSES && exit == -2) printf("\n>%d processes have been created so system has exited\n", MAX_PROCESSES);
+                else if (SHUTDOWN && exit == -SHUTDOWN) printf("\n>%d cycles have run so system has exited\n", SHUTDOWN);
+                else printf("\n>Of %d processes created, all terminable ones have terminated so system has exited\n", MAX_PROCESSES);
+        }
+        
+        errors[run-1] = base_error;
+        if (EXIT_STATUS_MESSAGE) printf("\nSYSTEM END RUN %d of %d\n\n", run, SYSTEM_RUNS);
+        int d;
+        if (EXIT_STATUS_MESSAGE)
+            for (d = 0; d < 4; d++) printf("---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\n");
     }
-
-    int base_error = bootOS();
-    if (DEBUG) printf("OS booted\n");
-
-    mainLoopOS(&base_error);
-    if (DEBUG) printf("OS shutdown\n");
-
-    stackCleanup();
-
-    if (base_error) {
-        if (EXIT_STATUS_MESSAGE || OUTPUT) printf("\n>System exited with error %d\n", base_error);
-    } else {
-        if (EXIT_STATUS_MESSAGE) printf("\n>System exited without incident\n");
-        if (OUTPUT)
-            if (EXIT_ON_MAX_PROCESSES) printf("\n>%d processes have been created so system has exited\n", MAX_PROCESSES);
-            else printf("\n>Of %d processes created, all terminable ones have terminated so system has exited\n", MAX_PROCESSES);
-    }
-
-    return base_error;
+    
+    word mass_error = 0;
+    for (run = 0; run < SYSTEM_RUNS; run++)
+        mass_error += errors[run];
+    return mass_error;
 
 }
 
@@ -100,8 +119,10 @@ int bootOS() {
     }
 
     //idl pcb has special parameters
-    idl = PCB_construct_init(&boot_error);
+    idl = PCB_construct(&boot_error);
     idl->pid = ULONG_MAX;
+    idl->io = false;
+    idl->type = undefined;
     idl->priority = LOWEST_PRIORITY;
     idl->state = waiting;
     idl->timeCreate = 0;
@@ -118,7 +139,8 @@ int bootOS() {
 
     //queues
     createQ = FIFOq_construct(&boot_error);
-    readyQ = FIFOq_construct(&boot_error);
+    for (t = 0; t < PRIORITIES_TOTAL; t++)
+        readyQ[t] = FIFOq_construct(&boot_error);
     terminateQ = FIFOq_construct(&boot_error);
 
     return boot_error;
@@ -164,7 +186,7 @@ int mainLoopOS(int *error) {
         return *error;
     }
 
-    if (OUTPUT) printf(">OS System Clock at Start %lu\n\n", clock_);
+    if (EXIT_STATUS_MESSAGE) printf(">OS System Clock at Start %lu\n\n", clock_);
     if (DEBUG) printf("Main loop begin\n");
     
 
@@ -259,20 +281,21 @@ int mainLoopOS(int *error) {
             }
             
             /*** PCB TRAPS CHECK ***/
-            for (t = 0; t < IO_NUMBER * IO_CALLS; t++)
-                 if (*pc == (*IO_TRAPS)[t / IO_CALLS][t % IO_CALLS]) {
-                    t = t / IO_CALLS;
-                    if (DEBUG) printf("Process %lu at PC %lu place in wQ of IO %d\n", current->pid, *pc, t + FIRST_IO);
-                    pthread_mutex_lock(&(IO[t]->MUTEX_io));
-                    
-                    sysStackPush(CPU->regs, error);
-                    trap_iohandler(t, error);
-                    sysStackPop(CPU->regs, error);
-                    pthread_mutex_unlock(&(IO[t]->MUTEX_io));
-                    pthread_cond_signal(&(IO[t]->COND_io));
-                    if (DEBUG) printf("At cycle PC = %lu, process %lu begins\n", *pc, current->pid);
-                    break;
-                } 
+            if (current->io)
+                for (t = 0; t < IO_NUMBER * IO_CALLS; t++)
+                     if (*pc == (*IO_TRAPS)[t / IO_CALLS][t % IO_CALLS]) {
+                        t = t / IO_CALLS;
+                        if (DEBUG) printf("Process %lu at PC %lu place in wQ of IO %d\n", current->pid, *pc, t + FIRST_IO);
+                        pthread_mutex_lock(&(IO[t]->MUTEX_io));
+
+                        sysStackPush(CPU->regs, error);
+                        trap_iohandler(t, error);
+                        sysStackPop(CPU->regs, error);
+                        pthread_mutex_unlock(&(IO[t]->MUTEX_io));
+                        pthread_cond_signal(&(IO[t]->COND_io));
+                        if (DEBUG) printf("At cycle PC = %lu, process %lu begins\n", *pc, current->pid);
+                        break;
+                    } 
             if (current != idl && current->pid > MAX_PROCESSES) {
                 if (EXIT_STATUS_MESSAGE) printf("post-trap: pcb with pid %lu exceeds max processes, exiting system\n", current->pid);
                 break;
@@ -287,6 +310,9 @@ int mainLoopOS(int *error) {
                 exit = -1;
             else exit = 0;
         
+        if (SHUTDOWN && clock_ >= SHUTDOWN)
+            exit = -SHUTDOWN;
+        
     } while (!*error && !exit);
     /**************************************************************************/
     /*************************** *********** **********************************/
@@ -296,13 +322,13 @@ int mainLoopOS(int *error) {
     sysStackPush(CPU->regs, error);
     sysStackPop(current->regs, error);
 
-    if (EXIT_STATUS_MESSAGE) printf("\nOS System Clock at Exit: %lu\n", clock_);
+    if (EXIT_STATUS_MESSAGE) printf("\n>OS System Clock at Exit: %lu\n\n\n", clock_);
 
 //    for(t = 0; t < TIMER_SLEEP; t++);
     
     cleanup(error);
 
-    return *error;
+    return exit;
 }
 
 /******************************************************************************/
@@ -399,11 +425,11 @@ void* io(void* tid) {
 
 void trap_terminate(int* error) {
     sysStackPop(current->regs, error);
-    current->state = terminated;
+    PCB_setState(current, terminated); //this is the ONLY PLACE a pcb should ever be terminated
     current->timeTerminate = clock_;
     closeable--;
     char pcbstr[PCB_TOSTRING_LEN];
-    if (OUTPUT) printf(">Terminated: %s\n", PCB_toString(current, pcbstr, error));
+    if (OUTPUT) printf(">Terminated:       %s\n", PCB_toString(current, pcbstr, error));
 
     FIFOq_enqueuePCB(terminateQ, current, error);
     //current = idl;
@@ -414,7 +440,7 @@ void trap_iohandler(const int t, int* error) {
     sysStackPop(current->regs, error);
     current->state = waiting;
     char pcbstr[PCB_TOSTRING_LEN];
-    if (OUTPUT) printf(">I/O %d: added: %s\n", t + FIRST_IO, PCB_toString(current, pcbstr, error));
+    if (OUTPUT) printf(">I/O %d added:     %s\n", t + FIRST_IO, PCB_toString(current, pcbstr, error));
     
     FIFOq_enqueuePCB(IO[t]->waitingQ, current, error);
     if (THREAD_DEBUG) printf("\t\tIO %d: gained PCB\n", t + FIRST_IO);
@@ -464,9 +490,10 @@ void isr_iocomplete(const int t, int* error) {
     if (!FIFOq_is_empty(IO[t]->waitingQ, error)) {
         PCB_p pcb = FIFOq_dequeue(IO[t]->waitingQ, error);
         pcb->state = ready;
-        FIFOq_enqueuePCB(readyQ, pcb, error);
+        pcb->lastClock = clock_; //to track starvation
+        FIFOq_enqueuePCB(readyQ[pcb->priority], pcb, error);
         char pcbstr[PCB_TOSTRING_LEN];
-        if (OUTPUT) printf(">I/O %d: complete: %s\n", t + FIRST_IO, PCB_toString(pcb, pcbstr, error));
+        if (OUTPUT) printf(">I/O %d complete:  %s\n", t + FIRST_IO, PCB_toString(pcb, pcbstr, error));
 
     } else if (THREAD_DEBUG) printf("ERROR! nothing to dequeue in IO %d\n", t);
 
@@ -482,12 +509,15 @@ void isr_iocomplete(const int t, int* error) {
  * Then calls the dispatcher.
  */
 void scheduler(int* error) {
+    static int schedules = 0;
 
+//    PCB_p previous = current;
     PCB_p temp;
     PCB_p pcb = current;
     bool pcb_idl = current == idl;
     bool pcb_term = current->state == terminated;
     bool pcb_io = current->state == waiting;
+    
     if (createQ == NULL) {
         *error += FIFO_NULL_ERROR;
         puts("ERROR: createQ is null");
@@ -504,47 +534,81 @@ void scheduler(int* error) {
     while (!FIFOq_is_empty(createQ, error)) {
         temp = FIFOq_dequeue(createQ, error);
         temp->state = ready;
-        FIFOq_enqueuePCB(readyQ, temp, error);
+        temp->lastClock = clock_;
+        FIFOq_enqueuePCB(readyQ[temp->priority], temp, error);
         if (OUTPUT) {
             char pcbstr[PCB_TOSTRING_LEN];
-            printf(">Enqueued to ready queue: %s\n", PCB_toString(temp, pcbstr, error));
+            printf(">Enqueued readyQ: %s\n", PCB_toString(temp, pcbstr, error));
         }
     }
+    
     if (DEBUG) printf("createQ transferred to readyQ\n");
-    if (readyQ->size < 2) {
-        if (pcb_term || pcb_io)
+    
+    int r;
+    for (r = 0; r < PRIORITIES_TOTAL; r++)
+        if (!FIFOq_is_empty(readyQ[r], error))
+            break;
+    
+    if (r == PRIORITIES_TOTAL) {// ||current->pid == readyQ[r]->head->data->pid) { //nothing in any ready queues
+        if (pcb_term || pcb_io) //or in locks or conds
             current = idl;
         PCB_setState(current, running);
         sysStackPush(current->regs, error);
         return;
     }
     
-    char pcbstr[PCB_TOSTRING_LEN];
-    printf(">PCB: %s\n", PCB_toString(current, pcbstr, error));
-    char rdqstr[PCB_TOSTRING_LEN];
-    printf(">Switching to: %s\n", PCB_toString(readyQ->head->data, rdqstr, error));
-
+    schedules++;
+    current->lastClock = clock_;
     
-    if (!pcb_idl && !pcb_term && !pcb_io) {
+//    int r;
+//    int p;
+//    if (!(schedules % STARVATION_CHECK_FREQUENCY))
+//        for (r = 0; r < PRIORITIES_TOTAL; r++)
+//            if (!FIFOq_is_empty(readyQ[r])) {
+//                PCB_p pcb = readyQ[r]->head->data;
+//                for (p = 0; r < readyQ[r]->size; r++)
+//                    if (clock_ - pcb->lastClock > STARVATION_CLOCK_LIMIT)
+//                        
+//            }        
+    
+    
+    if (OUTPUT) {
+        char pcbstr[PCB_TOSTRING_LEN];
+        printf(">PCB:             %s\n", PCB_toString(current, pcbstr, error));
+        char rdqstr[PCB_TOSTRING_LEN];
+        printf(">Switching to:    %s\n", PCB_toString(readyQ[r]->head->data, rdqstr, error));
+    }
+    //if it's a timer interrupt
+    if (!pcb_idl && !pcb_term && !pcb_io) { //add stuff about locks and conds
         current->state = ready;
-        FIFOq_enqueuePCB(readyQ, current, error);
+        current->lastClock = clock_;
+        FIFOq_enqueuePCB(readyQ[current->priority], current, error);
     } else idl->state = waiting;
     dispatcher(error);
 
-    char runstr[PCB_TOSTRING_LEN];
-    printf(">Now running: %s\n", PCB_toString(current, runstr, error));
-    if (!pcb_idl && !pcb_term && !pcb_io) {
-        printf(">Returned to ready queue: %s\n", PCB_toString(readyQ->tail->data, rdqstr, error));
-    } else if (pcb_idl) {
-        printf(">Idle process switch run: %s\n", PCB_toString(idl, rdqstr, error));
-    } else if (pcb_term) {
-        printf(">Last process terminated: %s\n", PCB_toString(terminateQ->tail->data, rdqstr, error));
-    } else if (pcb_io) {
-        printf(">Requested I/O operation: %s\n", PCB_toString(pcb, rdqstr, error));
+    if (OUTPUT) {
+        char runstr[PCB_TOSTRING_LEN];
+        printf(">Now running:     %s\n", PCB_toString(current, runstr, error));
+        char rdqstr[PCB_TOSTRING_LEN];
+        if (!pcb_idl && !pcb_term && !pcb_io)
+            if (readyQ[r]->size > 1)
+                printf(">Requeued readyQ: %s\n", PCB_toString(readyQ[r]->tail->data, rdqstr, error));
+            else
+                printf(">No process return required.\n");
+        else if (pcb_idl)
+            printf(">Idle process:    %s\n", PCB_toString(idl, rdqstr, error));
+        else if (pcb_term)
+            printf(">Exited system:   %s\n", PCB_toString(terminateQ->tail->data, rdqstr, error));
+        else if (pcb_io)
+            printf(">Requested I/O:   %s\n", PCB_toString(pcb, rdqstr, error));
+        int stz = FIFOQ_TOSTRING_MAX;
+        char str[stz];
+        printf(">%s\n", FIFOq_toString(readyQ[r], str, &stz, error));
+
     }
     int stz = FIFOQ_TOSTRING_MAX;
     char str[stz];
-    printf(">%s\n", FIFOq_toString(readyQ, str, &stz, error));
+    //printf(">%s\n", FIFOq_toString(readyQ, str, &stz, error));
 
 
 }
@@ -554,14 +618,17 @@ void scheduler(int* error) {
  */
 void dispatcher(int* error) {
 
+    int r;
+    
     if (readyQ == NULL) {
         *error += FIFO_NULL_ERROR;
-        puts("ERROR: readyQ is null");
-    } else if (!FIFOq_is_empty(readyQ, error)) { //dequeue the head of readyQueue
-        current = FIFOq_dequeue(readyQ, error);
-    } else {
-        current = idl;
-    }
+        printf("%s", "ERROR: readyQ is null");
+    } else
+        for (r = 0; r < PRIORITIES_TOTAL; r++)
+            if (!FIFOq_is_empty(readyQ[r], error)) { //dequeue the head of readyQueue
+                current = FIFOq_dequeue(readyQ[r], error);
+                break;
+            }
 
     //change current's state to running point
     current->state = running;
@@ -594,8 +661,7 @@ int createPCBs(int *error) {
     int i;
     int r = rand() % (MAX_NEW_PCB + 1);
     char buffer[PCB_TOSTRING_LEN];
-    
-    
+        
     if (r + processes_created >= MAX_PROCESSES) {
         r = MAX_PROCESSES - processes_created;
     }
@@ -611,20 +677,34 @@ int createPCBs(int *error) {
         return *error;
     }
 
-    if (DEBUG) printf("createPCBs: creating %d PCBs and enqueueing them to createQ\n", r);
+    if (CREATEPCB_DEBUG) printf("createPCBs: creating up to %d PCBs and enqueueing them to createQ\n", r);
     for (i = 0; i < r; i++) {
+        
+        if (!PCBs_available()) {
+            r = i;
+            if (CREATEPCB_DEBUG) printf("all pcbs used up; %d pcbs created\n", r);
+            break;
+        }
         // PCB_construct initializes state to 0 (created)
         PCB_p newPcb = PCB_construct_init(error);
+        
+        if (newPcb->type == undefined)
+            *error += PCB_UNDEFINED_ERROR;
+        
         newPcb->timeCreate = clock_;
+        newPcb->lastClock = clock_;
         closeable += newPcb->regs->reg.TERMINATE > 0;
-        if (DEBUG) printf("New PCB created: %s\n", PCB_toString(newPcb, buffer, error));
+        
+        
+        
+        if (CREATEPCB_DEBUG) printf("New PCB created: %s\n", PCB_toString(newPcb, buffer, error));
         FIFOq_enqueuePCB(createQ, newPcb, error);
         processes_created++;
     }
-    if (DEBUG) printf("PCBs all created\n");
+    if (CREATEPCB_DEBUG) printf("PCBs all created\n");
     if (!first_batch) first_batch = r;
-    if (DEBUG) printf("total created pcbs: %d and exit = %d\n", processes_created, (processes_created >= MAX_PROCESSES ? -1 : 0));
-    return (processes_created >= MAX_PROCESSES ? -1 : 0);
+    if (CREATEPCB_DEBUG) printf("total created pcbs: %d and exit = %d\n", processes_created, (processes_created >= MAX_PROCESSES ? -1 : 0));
+    return (processes_created >= MAX_PROCESSES ? -2 : 0);
 }
 
 /******************************************************************************/
@@ -675,6 +755,8 @@ int sysStackPop(REG_p toRegs, int* error) {
 /******************************************************************************/
 
 void cleanup(int* error) {
+    
+    if (EXIT_STATUS_MESSAGE) printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n\n");
 
     int t;
     int s;
@@ -692,6 +774,7 @@ void cleanup(int* error) {
     pthread_mutex_destroy(&MUTEX_timer);
     pthread_cond_destroy(&COND_timer);
 
+    queueCleanup(terminateQ, "terminateQ", error);
     
     for (t = 0; t < IO_NUMBER; t++) {
         char wQ[12] = "waitingQ_x";
@@ -714,8 +797,12 @@ void cleanup(int* error) {
         IO[t] = NULL;
     }
 
-    queueCleanup(terminateQ, "terminateQ", error);
-    queueCleanup(readyQ, "readyQ", error);
+    int r;
+    char qustr[16];
+    for (r = 0; r < PRIORITIES_TOTAL; r++) {
+        sprintf(qustr, "readyQ[%d]", r);
+        queueCleanup(readyQ[r], qustr, error);
+    }
     queueCleanup(createQ, "createQ", error);
 
     int endidl = current->pid == idl->pid;

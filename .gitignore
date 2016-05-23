@@ -1,5 +1,6 @@
 # Created by https://www.gitignore.io/api/c++,windows,osx,linux
-
+*.xml
+*.iml
 ### output file ###
 *.txt
 !readme.txt

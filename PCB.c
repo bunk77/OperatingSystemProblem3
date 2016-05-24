@@ -93,6 +93,7 @@ int PCB_init(PCB_p this) {
         
         this->pid = ++pidCounter;
         this->attentionCount = 0;
+        this->promoted = false;
         //IO and type determination
         int type_chance[LAST_PAIR+1];
         percent = 0;
@@ -154,6 +155,7 @@ int PCB_init(PCB_p this) {
             percent += PRIORITIES[min(priority, PRIORITY_UNIQUE_UPTO)];
             if (chance < percent) {
                 this->priority = priority;
+                this->orig_priority = priority;
                 break;
             }
             //printf("\npid: %lu chance: %d percent %d priority: %d\n", this->pid, chance, percent, priority);

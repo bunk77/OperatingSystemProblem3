@@ -57,7 +57,7 @@ int    Node_setData  (Node_p this, PCB_p data);
 Node_p Node_getNext  (Node_p this, int * ptr_error);
 int    Node_setNext  (Node_p this, Node_p next);
 char * Node_toString (Node_p this, char *str, int *ptr_error);
-
+Node_p FIFOq_remove_and_return_next(Node_p curr, Node_p prev, FIFOq_p list);
 int is_null(void *this, int *ptr_error);
 int FIFOq_test_main(int argc, char** argv);
 

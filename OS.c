@@ -491,6 +491,9 @@ void isr_iocomplete(const int t, int* error) {
         PCB_p pcb = FIFOq_dequeue(IO[t]->waitingQ, error);
         pcb->state = ready;
         pcb->lastClock = clock_; //to track starvation
+        if (pcb->promoted) {
+            pcb->attentionCount++;
+        }
         FIFOq_enqueuePCB(readyQ[pcb->priority], pcb, error);
         char pcbstr[PCB_TOSTRING_LEN];
         if (OUTPUT) printf(">I/O %d complete:  %s\n", t + FIRST_IO, PCB_toString(pcb, pcbstr, error));
@@ -511,7 +514,6 @@ void isr_iocomplete(const int t, int* error) {
 void scheduler(int* error) {
     static int schedules = 0;
 
-//    PCB_p previous = current;
     PCB_p temp;
     PCB_p pcb = current;
     bool pcb_idl = current == idl;
@@ -549,28 +551,64 @@ void scheduler(int* error) {
         if (!FIFOq_is_empty(readyQ[r], error))
             break;
     
-    if (r == PRIORITIES_TOTAL) {// ||current->pid == readyQ[r]->head->data->pid) { //nothing in any ready queues
+    if (r == PRIORITIES_TOTAL) {// ||current->pid == readyQ[r]->head->data->pid)  //nothing in any ready queues
         if (pcb_term || pcb_io) //or in locks or conds
             current = idl;
         PCB_setState(current, running);
         sysStackPush(current->regs, error);
         return;
     }
-    
+  
     schedules++;
-    current->lastClock = clock_;
-    
-//    int r;
-//    int p;
-//    if (!(schedules % STARVATION_CHECK_FREQUENCY))
-//        for (r = 0; r < PRIORITIES_TOTAL; r++)
-//            if (!FIFOq_is_empty(readyQ[r])) {
-//                PCB_p pcb = readyQ[r]->head->data;
-//                for (p = 0; r < readyQ[r]->size; r++)
-//                    if (clock_ - pcb->lastClock > STARVATION_CLOCK_LIMIT)
-//                        
-//            }        
-    
+    if (!(schedules % STARVATION_CHECK_FREQUENCY)) {
+        puts("~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?");
+        puts("Starvation Daemon");
+        int rank;
+        for (rank = 0; rank < PRIORITIES_TOTAL; rank++) {
+            Node_p curr = readyQ[rank]->head;
+            Node_p prev = curr;
+            Node_p next;
+            while(curr != NULL) {
+                printf("PID of inspect: %x while Rank: %d PCB rank: %x, att: %d\n", curr->data->pid, rank, curr->data->priority, curr->data->attentionCount);
+                //if current recieved enough attention then remove, demote and set current to next
+                if (curr->data->attentionCount > 3) {
+                    puts("Demoting a process");
+                    printf("Demoted PID: %x while Rank: %d PCB rank: %x att: %d\n", curr->data->pid, rank, curr->data->priority, curr->data->attentionCount);
+                    next = FIFOq_remove_and_return_next(curr, prev, readyQ[rank]);
+                    curr->data->attentionCount = 0;
+                    curr->data->promoted = false;
+                    curr->data->priority = curr->data->orig_priority;
+                    FIFOq_enqueue(readyQ[curr->data->priority], curr, error);
+                    curr = next;
+                    if(curr == readyQ[rank]->head) {
+                        prev = curr;
+                    } 
+                } else if ((clock_ - curr->data->lastClock) > STARVATION_CLOCK_LIMIT && rank > 0) {
+                    //remove current, promote current process, set current to next
+                    puts("Promoting a process");
+                    printf("Promoted PID: %x while Rank: %d PCB rank: %x att: %d\n", curr->data->pid, rank, curr->data->priority, curr->data->attentionCount);
+                    next = FIFOq_remove_and_return_next(curr, prev, readyQ[rank]);
+                    if(!curr->data->promoted) {
+                        curr->data->attentionCount = 0;
+                    } else {
+                        printf("Node PID: %x\n promoted once again.", curr->data->pid);
+                    }
+                    curr->data->promoted = true;
+                    curr->data->priority = rank - 1;
+                    FIFOq_enqueue(readyQ[rank-1], curr, error);
+                    curr = next;
+                    if(curr == readyQ[rank]->head) {
+                        prev = curr;
+                    } 
+                } else {
+                    prev = curr;
+                    curr = curr->next_node;
+                }
+            }
+        }
+        puts("~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?");
+        
+    }
     
     if (OUTPUT) {
         char pcbstr[PCB_TOSTRING_LEN];
@@ -582,6 +620,9 @@ void scheduler(int* error) {
     if (!pcb_idl && !pcb_term && !pcb_io) { //add stuff about locks and conds
         current->state = ready;
         current->lastClock = clock_;
+        if (current->promoted) {
+            current->attentionCount++;
+        }
         FIFOq_enqueuePCB(readyQ[current->priority], current, error);
     } else idl->state = waiting;
     dispatcher(error);

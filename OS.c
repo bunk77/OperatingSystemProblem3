@@ -570,6 +570,7 @@ void scheduler(int* error) {
             Node_p next;
             while(curr != NULL) {
                 printf("PID of inspect: %x while Rank: %d PCB rank: %x, att: %d\n", curr->data->pid, rank, curr->data->priority, curr->data->attentionCount);
+                printf("Wait time: %d\n", (clock_ - curr->data->lastClock));
                 //if current recieved enough attention then remove, demote and set current to next
                 if (curr->data->attentionCount > 3) {
                     puts("Demoting a process");
@@ -644,12 +645,9 @@ void scheduler(int* error) {
             printf(">Requested I/O:   %s\n", PCB_toString(pcb, rdqstr, error));
         int stz = FIFOQ_TOSTRING_MAX;
         char str[stz];
-        printf(">%s\n", FIFOq_toString(readyQ[r], str, &stz, error));
+        printf(">rank %d %s\n", r, FIFOq_toString(readyQ[r], str, &stz, error));
 
     }
-    int stz = FIFOQ_TOSTRING_MAX;
-    char str[stz];
-    printf(">%s\n", FIFOq_toString(readyQ[r], str, &stz, error));
 
 
 }

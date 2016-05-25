@@ -569,12 +569,12 @@ void scheduler(int* error) {
             Node_p prev = curr;
             Node_p next;
             while(curr != NULL) {
-                printf("PID of inspect: %x while Rank: %d PCB rank: %x, att: %d\n", curr->data->pid, rank, curr->data->priority, curr->data->attentionCount);
-                printf("Wait time: %d\n", (clock_ - curr->data->lastClock));
+                printf("PID of inspect: %x while Rank: %lu PCB rank: %x, attentionRecieved: %lu\n", curr->data->pid, rank, curr->data->priority, curr->data->attentionCount);
+                printf("Wait time: %lu\n", (clock_ - curr->data->lastClock));
                 //if current recieved enough attention then remove, demote and set current to next
                 if (curr->data->attentionCount > 3) {
                     puts("Demoting a process");
-                    printf("Demoted PID: %x while Rank: %d PCB rank: %x att: %d\n", curr->data->pid, rank, curr->data->priority, curr->data->attentionCount);
+                    printf("Demoted PID: %x while Rank: %lu PCB rank: %x attentionRecieved: %lu\n", curr->data->pid, rank, curr->data->priority, curr->data->attentionCount);
                     next = FIFOq_remove_and_return_next(curr, prev, readyQ[rank]);
                     curr->data->attentionCount = 0;
                     curr->data->promoted = false;
@@ -587,12 +587,12 @@ void scheduler(int* error) {
                 } else if ((clock_ - curr->data->lastClock) > STARVATION_CLOCK_LIMIT && rank > 0) {
                     //remove current, promote current process, set current to next
                     puts("Promoting a process");
-                    printf("Promoted PID: %x while Rank: %d PCB rank: %x att: %d\n", curr->data->pid, rank, curr->data->priority, curr->data->attentionCount);
+                    printf("Promoted PID: %x while Rank: %d PCB rank: %x attentionRecieved: %lu\n", curr->data->pid, rank, curr->data->priority, curr->data->attentionCount);
                     next = FIFOq_remove_and_return_next(curr, prev, readyQ[rank]);
                     if(!curr->data->promoted) {
                         curr->data->attentionCount = 0;
                     } else {
-                        printf("Node PID: %x\n promoted once again.", curr->data->pid);
+                        printf("Node PID: %x\n promoted once again.\n", curr->data->pid);
                     }
                     curr->data->promoted = true;
                     curr->data->priority = rank - 1;
@@ -610,6 +610,10 @@ void scheduler(int* error) {
         puts("~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?");
         
     }
+
+    for (r = 0; r < PRIORITIES_TOTAL; r++)
+        if (!FIFOq_is_empty(readyQ[r], error))
+            break;
     
     if (OUTPUT) {
         char pcbstr[PCB_TOSTRING_LEN];
@@ -750,7 +754,7 @@ int createPCBs(int *error) {
 /************************** SYSTEM SUBROUTINES ********************************/
 /******************************************************************************/
 
-int sysStackPush(REG_p fromRegs, int* error) {
+void sysStackPush(REG_p fromRegs, int* error) {
     int r;
 
     for (r = 0; r < REGNUM; r++) {
@@ -769,7 +773,7 @@ int sysStackPush(REG_p fromRegs, int* error) {
     }
 }
 
-int sysStackPop(REG_p toRegs, int* error) {
+void sysStackPop(REG_p toRegs, int* error) {
     int r;
     if (STACK_DEBUG) printf("max_pc is %lu\n", toRegs->reg.MAX_PC);
     for (r = REGNUM - 1; r >= 0; r--)

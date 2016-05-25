@@ -61,7 +61,7 @@
 #define PCB_UNDEFINED_ERROR 571
 
 #define PCB_DEBUG false
-#define PCB_TOSTRING_LEN 180
+#define PCB_TOSTRING_LEN 250 
 
 #define LAST_PAIR mutual_A
 

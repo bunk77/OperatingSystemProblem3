@@ -396,7 +396,7 @@ char * PCB_toString(PCB_p this, char *str, int *ptr_error) {
         char regString[PCB_TOSTRING_LEN - 1];
         const char * format = "PID: 0x%04lx  PC: 0x%05lx  State: %s  Priority: 0x%x  Intensity: %s  Type: %s  %s";
         snprintf(str, (size_t) PCB_TOSTRING_LEN - 1, format, this->pid, this->regs->reg.pc, 
-                 STATE[this->state], this->priority, this->io? "IO" : "CPU", TYPE[this->type],
+                 STATE[this->state], this->orig_priority, this->io? "IO" : "CPU", TYPE[this->type],
                  Reg_File_toString(this->regs, regString, ptr_error));
     }
 

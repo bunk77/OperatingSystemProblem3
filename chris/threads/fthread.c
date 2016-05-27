@@ -151,5 +151,4 @@ void thread_cond_signal(cond_var_type buf_not_empty) {
         thread_condition_type cond = FIFOQ_dequeue(buf_not_empty->waiting);
         free(cond);
     }
-    //free(buf_not_empty);
 }

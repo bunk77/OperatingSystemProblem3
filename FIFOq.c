@@ -151,7 +151,7 @@ char * FIFOq_toString(FIFOq_p this, char *str, int *stz, int *error) {
     if (!is_null(this, error) && !is_null(str, error)) {
         char pcbstr[PCB_TOSTRING_LEN];
                                                     // ">I/O %d added:     %s\n"
-        usedChars += snprintf(str, *stz - usedChars, "Head:           ");
+        usedChars += snprintf(str, *stz - usedChars, "Head:");
         if (this->head != NULL) {
             Node_p node = this->head;
             usedChars += snprintf(str + strlen(str), *stz - usedChars, " %s\n-", PCB_toString(node->data, pcbstr, error));
@@ -330,4 +330,27 @@ int is_null(void *this, int *ptr_error) {
         *ptr_error = error + *ptr_error;
     }
     return ptr_error == NULL ? error : error + *ptr_error;
+}
+
+
+Node_p FIFOq_remove_and_return_next(Node_p curr, Node_p prev, FIFOq_p list) {
+    if (curr == prev && curr == list->head) { // remove head
+        list->head = curr->next_node;//removes curr
+        curr->next_node = NULL;
+        if (list->head == NULL) { //it was the only node
+            list->tail = list->head;
+        }
+        list->size--;
+        return list->head;
+    } else if (prev->next_node == curr) {
+        prev->next_node = curr->next_node;
+        curr->next_node = NULL;
+        if(list->tail == curr) {
+            list->tail = prev;
+        }
+        list->size--;
+        return prev->next_node;
+    } else {
+        return NULL;
+    }
 }

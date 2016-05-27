@@ -42,8 +42,9 @@
 #define PCB_CREATE_CHANCE (TIME_QUANTUM * 50)
 #define RUN_MIN_TIME 3000
 #define RUN_TIME_RANGE 1000
-#define STARVATION_CHECK_FREQUENCY 20
-#define STARVATION_CLOCK_LIMIT 25000
+#define STARVATION_CHECK_FREQUENCY (TIME_QUANTUM / 15)
+#define STARVATION_CLOCK_LIMIT (TIME_QUANTUM * 50)
+#define PROMOTION_ALLOWANCE 1
 
 //INTERRUPT CODES
 #define NO_INTERRUPT 9999
@@ -100,8 +101,8 @@ void     isr_iocomplete  (const int IO, int* error);
 void     scheduler       (int* error);
 void     dispatcher      (int* error);
 int      createPCBs  	 (int *error);
-int      sysStackPush    (REG_p, int* error);
-int      sysStackPop     (REG_p, int* error);
+void      sysStackPush    (REG_p, int* error);
+void      sysStackPop     (REG_p, int* error);
 void     cleanup         (int* error);
 void     queueCleanup    (FIFOq_p, char*, int* error);
 void     stackCleanup    ();

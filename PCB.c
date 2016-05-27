@@ -92,7 +92,8 @@ int PCB_init(PCB_p this) {
         int chance, percent, priority, type;
         
         this->pid = ++pidCounter;
-
+        this->attentionCount = 0;
+        this->promoted = false;
         //IO and type determination
         int type_chance[LAST_PAIR+1];
         percent = 0;
@@ -154,6 +155,7 @@ int PCB_init(PCB_p this) {
             percent += PRIORITIES[min(priority, PRIORITY_UNIQUE_UPTO)];
             if (chance < percent) {
                 this->priority = priority;
+                this->orig_priority = priority;
                 break;
             }
             //printf("\npid: %lu chance: %d percent %d priority: %d\n", this->pid, chance, percent, priority);
@@ -394,7 +396,7 @@ char * PCB_toString(PCB_p this, char *str, int *ptr_error) {
         char regString[PCB_TOSTRING_LEN - 1];
         const char * format = "PID: 0x%04lx  PC: 0x%05lx  State: %s  Priority: 0x%x  Intensity: %s  Type: %s  %s";
         snprintf(str, (size_t) PCB_TOSTRING_LEN - 1, format, this->pid, this->regs->reg.pc, 
-                 STATE[this->state], this->priority, this->io? "IO" : "CPU", TYPE[this->type],
+                 STATE[this->state], this->orig_priority, this->io? "IO" : "CPU", TYPE[this->type],
                  Reg_File_toString(this->regs, regString, ptr_error));
     }
 

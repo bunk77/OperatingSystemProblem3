@@ -10,6 +10,11 @@ FIFOq.o: FIFOq.c FIFOq.h
 PCB.o: PCB.c PCB.h
 	gcc -c PCB.c
 
-clean: 
+clean:
 	rm -f problem3.exe OS.o FIFOq.o PCB.o
 
+debugging:
+	gcc -g -Wall OS.c FIFOq.c PCB.c -o u3
+
+
+ 

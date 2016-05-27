@@ -164,13 +164,14 @@ int mainLoopOS(int *error) {
 
     sysStackPush(current->regs, error);
     if (STACK_DEBUG) printf("current max_pc is %lu\n", current->regs->reg.MAX_PC);
-    const CPU_p CPU = (CPU_p) malloc(sizeof (struct CPU));
+    const CPU_p const CPU = (CPU_p) malloc(sizeof (struct CPU));
     CPU->regs = (REG_p) malloc(sizeof (union regfile));
     REG_init(CPU->regs, error);
     if (STACK_DEBUG) printf("pre max_pc is %lu\n", CPU->regs->reg.MAX_PC);
     sysStackPop(CPU->regs, error);
     if (STACK_DEBUG) printf("post max_pc is %lu\n", CPU->regs->reg.MAX_PC);
-
+    
+    //alias CPU's registers
     word * const pc = &(CPU->regs->reg.pc);
     word * const MAX_PC = &(CPU->regs->reg.MAX_PC);
     word * const sw = &(CPU->regs->reg.sw);
@@ -426,9 +427,10 @@ void trap_terminate(int* error) {
     sysStackPop(current->regs, error);
     PCB_setState(current, terminated); //this is the ONLY PLACE a pcb should ever be terminated
     current->timeTerminate = clock_;
+    current->priority = current->orig_priority;
     closeable--;
     char pcbstr[PCB_TOSTRING_LEN];
-    if (OUTPUT) printf(">Terminated:       %s\n", PCB_toString(current, pcbstr, error));
+    if (OUTPUT) printf(">Terminated:      %s\n", PCB_toString(current, pcbstr, error));
 
     FIFOq_enqueuePCB(terminateQ, current, error);
     //current = idl;
@@ -489,6 +491,10 @@ void isr_iocomplete(const int t, int* error) {
     if (!FIFOq_is_empty(IO[t]->waitingQ, error)) {
         PCB_p pcb = FIFOq_dequeue(IO[t]->waitingQ, error);
         pcb->state = ready;
+        pcb->lastClock = clock_; //to track starvation
+        if (pcb->promoted) {
+            pcb->attentionCount++;
+        }
         FIFOq_enqueuePCB(readyQ[pcb->priority], pcb, error);
         char pcbstr[PCB_TOSTRING_LEN];
         if (OUTPUT) printf(">I/O %d complete:  %s\n", t + FIRST_IO, PCB_toString(pcb, pcbstr, error));
@@ -507,11 +513,8 @@ void isr_iocomplete(const int t, int* error) {
  * Then calls the dispatcher.
  */
 void scheduler(int* error) {
-    //for measuring every 4th output
-    static int context_switch = 0;
     static int schedules = 0;
 
-//    PCB_p previous = current;
     PCB_p temp;
     PCB_p pcb = current;
     bool pcb_idl = current == idl;
@@ -520,13 +523,13 @@ void scheduler(int* error) {
     
     if (createQ == NULL) {
         *error += FIFO_NULL_ERROR;
-        printf("%s", "ERROR: createQ is null");
+        puts("ERROR: createQ is null");
         return;
     }
     
     if (readyQ == NULL) {
         *error += FIFO_NULL_ERROR;
-        printf("%s", "ERROR: readyQ is null");
+        puts("ERROR: readyQ is null");
         return;
     }
 
@@ -534,6 +537,7 @@ void scheduler(int* error) {
     while (!FIFOq_is_empty(createQ, error)) {
         temp = FIFOq_dequeue(createQ, error);
         temp->state = ready;
+        temp->lastClock = clock_;
         FIFOq_enqueuePCB(readyQ[temp->priority], temp, error);
         if (OUTPUT) {
             char pcbstr[PCB_TOSTRING_LEN];
@@ -548,43 +552,92 @@ void scheduler(int* error) {
         if (!FIFOq_is_empty(readyQ[r], error))
             break;
     
-    if (r == PRIORITIES_TOTAL) {// ||current->pid == readyQ[r]->head->data->pid) { //nothing in any ready queues
+    if (r == PRIORITIES_TOTAL) {// ||current->pid == readyQ[r]->head->data->pid)  //nothing in any ready queues
         if (pcb_term || pcb_io) //or in locks or conds
             current = idl;
         PCB_setState(current, running);
         sysStackPush(current->regs, error);
         return;
     }
-    
+  
     schedules++;
-    current->lastClock = clock_;
+    if (!(schedules % STARVATION_CHECK_FREQUENCY)) {
+        if (DEBUG) puts("~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?");
+        if (DEBUG) puts("Starvation Daemon");
+        int rank;
+        for (rank = 0; rank < PRIORITIES_TOTAL; rank++) {
+            Node_p curr = readyQ[rank]->head;
+            Node_p prev = curr;
+            Node_p next;
+            while(curr != NULL) {
+                if (DEBUG) printf(">PID of inspect: %lu while Rank: %d PCB rank: %hu, attentionRecieved: %lu\n", curr->data->pid, rank, curr->data->priority, curr->data->attentionCount);
+                if (DEBUG) printf("Wait time: %lu\n", (clock_ - curr->data->lastClock));
+                //if current recieved enough attention then remove, demote and set current to next
+                if (curr->data->attentionCount >= PROMOTION_ALLOWANCE) {
+                    if (DEBUG) puts("Demoting a process");
+                    if (DEBUG) printf(">Demoted PID: %lu while Rank: %d PCB rank: %hu attentionRecieved: %lu\n", curr->data->pid, rank, curr->data->priority, curr->data->attentionCount);
+                    next = FIFOq_remove_and_return_next(curr, prev, readyQ[rank]);
+                    curr->data->attentionCount = 0;
+                    curr->data->promoted = false;
+                    curr->data->priority = curr->data->orig_priority;
+                    FIFOq_enqueue(readyQ[curr->data->priority], curr, error);
+                    char pcbstr[PCB_TOSTRING_LEN];
+                    if (OUTPUT) printf(">Demoted:         %s\n", PCB_toString(curr->data, pcbstr, error));
+                    curr = next;
+                    if(curr == readyQ[rank]->head) {
+                        prev = curr;
+                    } 
+                } else if (rank > 0 && (clock_ - curr->data->lastClock) > STARVATION_CLOCK_LIMIT) {
+                    //remove current, promote current process, set current to next
+                    if (DEBUG) puts("Promoting a process");
+                    if (DEBUG) printf(">Promoted PID: %lu while Rank: %d PCB rank: %hu attentionRecieved: %lu\n", curr->data->pid, rank, curr->data->priority, curr->data->attentionCount);
+                    next = FIFOq_remove_and_return_next(curr, prev, readyQ[rank]);
+                    if(!curr->data->promoted) {
+                        curr->data->attentionCount = 0;
+                    } else {
+                        if (DEBUG) printf("Node PID: %lu\n promoted once again.\n", curr->data->pid);
+                    }
+                    char pcbstr[PCB_TOSTRING_LEN];
+                    if (OUTPUT) printf(">Promoted:        %s\n", PCB_toString(curr->data, pcbstr, error));                    
+                    curr->data->promoted = true;
+                    curr->data->priority = rank - 1;
+                    FIFOq_enqueue(readyQ[curr->data->priority], curr, error);
+                    curr = next;
+                    if(curr == readyQ[rank]->head) {
+                        prev = curr;
+                    } 
+                } else {
+                    prev = curr;
+                    curr = curr->next_node;
+                }
+            }
+        }
+        if (DEBUG) puts("~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?");
+        
+    }
+
+    for (r = 0; r < PRIORITIES_TOTAL; r++)
+        if (!FIFOq_is_empty(readyQ[r], error))
+            break;
     
-//    int r;
-//    int p;
-//    if (!(schedules % STARVATION_CHECK_FREQUENCY))
-//        for (r = 0; r < PRIORITIES_TOTAL; r++)
-//            if (!FIFOq_is_empty(readyQ[r])) {
-//                PCB_p pcb = readyQ[r]->head->data;
-//                for (p = 0; r < readyQ[r]->size; r++)
-//                    if (clock_ - pcb->lastClock > STARVATION_CLOCK_LIMIT)
-//                        
-//            }        
-    
-    
-    if (!(context_switch % OUTPUT_CONTEXT_SWITCH) && OUTPUT) {
+    if (OUTPUT) {
         char pcbstr[PCB_TOSTRING_LEN];
         printf(">PCB:             %s\n", PCB_toString(current, pcbstr, error));
         char rdqstr[PCB_TOSTRING_LEN];
         printf(">Switching to:    %s\n", PCB_toString(readyQ[r]->head->data, rdqstr, error));
     }
-
+    //if it's a timer interrupt
     if (!pcb_idl && !pcb_term && !pcb_io) { //add stuff about locks and conds
         current->state = ready;
+        current->lastClock = clock_;
+        if (current->promoted) {
+            current->attentionCount++;
+        }
         FIFOq_enqueuePCB(readyQ[current->priority], current, error);
     } else idl->state = waiting;
     dispatcher(error);
 
-    if (!(context_switch % OUTPUT_CONTEXT_SWITCH) && OUTPUT) {
+    if (OUTPUT) {
         char runstr[PCB_TOSTRING_LEN];
         printf(">Now running:     %s\n", PCB_toString(current, runstr, error));
         char rdqstr[PCB_TOSTRING_LEN];
@@ -601,11 +654,11 @@ void scheduler(int* error) {
             printf(">Requested I/O:   %s\n", PCB_toString(pcb, rdqstr, error));
         int stz = FIFOQ_TOSTRING_MAX;
         char str[stz];
-        printf(">%s\n", FIFOq_toString(readyQ[r], str, &stz, error));
+        if (OUTPUT) printf(">Priority %d %s\n", r, FIFOq_toString(readyQ[r], str, &stz, error));
 
     }
 
-    //"housekeeping"
+
 }
 
 /* Dispatches a new current process by dequeuing the head of the ready queue,
@@ -706,24 +759,26 @@ int createPCBs(int *error) {
 /************************** SYSTEM SUBROUTINES ********************************/
 /******************************************************************************/
 
-int sysStackPush(REG_p fromRegs, int* error) {
+void sysStackPush(REG_p fromRegs, int* error) {
     int r;
 
-    for (r = 0; r < REGNUM; r++)
+    for (r = 0; r < REGNUM; r++) {
         if (SysPointer >= SYSSIZE - 1) {
             *error += CPU_STACK_ERROR;
             printf("ERROR: Sysstack exceeded\n");
-        } else
+        } else {
             SysStack[SysPointer++] = fromRegs->gpu[r];
-
+        }
+    }
     int i;
-    if (STACK_DEBUG)
+    if (STACK_DEBUG) {
         for (i = 0; i <= SysPointer; i++) {
             printf("\tPostPush SysStack[%d] = %lu\n", i, SysStack[i]);
         }
+    }
 }
 
-int sysStackPop(REG_p toRegs, int* error) {
+void sysStackPop(REG_p toRegs, int* error) {
     int r;
     if (STACK_DEBUG) printf("max_pc is %lu\n", toRegs->reg.MAX_PC);
     for (r = REGNUM - 1; r >= 0; r--)
@@ -762,7 +817,7 @@ void cleanup(int* error) {
     pthread_cond_signal(&COND_timer);
     if (THREAD_DEBUG) printf("timer shutoff signal sent\n");
     pthread_join(THREAD_timer, NULL);
-    //...
+
     if (THREAD_DEBUG) printf("timer shutoff successful\n");
     pthread_mutex_destroy(&MUTEX_timer);
     pthread_cond_destroy(&COND_timer);
@@ -774,7 +829,6 @@ void cleanup(int* error) {
         wQ[9] = t + '0';
         pthread_cond_signal(&(IO[t]->COND_io));
 
-//        while (pthread_mutex_trylock(&(IO[t]->MUTEX_io)));
         pthread_mutex_lock(&(IO[t]->MUTEX_io));
         
         IO[t]->SHUTOFF_io = true;
@@ -840,7 +894,7 @@ void queueCleanup(FIFOq_p queue, char *qstr, int *error) {
                 if (EXIT_STATUS_MESSAGE) printf("\t%s\n", PCB_toString(pcb, pcbstr, error));
                 PCB_destruct(pcb);
 
-            } else printf("IDL!!!!!!!!!!\n");
+            } else puts("IDL!!!!!!!!!");
 
         }
     } else if (EXIT_STATUS_MESSAGE) printf(" empty\n");
@@ -852,12 +906,10 @@ void queueCleanup(FIFOq_p queue, char *qstr, int *error) {
  */
 void stackCleanup() {
     int i;
-    if (SysPointer > 0) {
-        if (EXIT_STATUS_MESSAGE) {
-            printf("System exited with non-empty stack\n");
-            for (i = 0; i <= SysPointer; i++) {
-                printf("\tSysStack[%d] = %lu\n", i, SysStack[i]);
-            }
+    if (SysPointer > 0 && EXIT_STATUS_MESSAGE) {
+        printf("System exited with non-empty stack\n");
+        for (i = 0; i <= SysPointer; i++) {
+            printf("\tSysStack[%d] = %lu\n", i, SysStack[i]);
         }
     }
 }

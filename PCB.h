@@ -43,6 +43,7 @@
 #define MIN_IO_CALL 25
 #define TERM_RANGE 10
 #define TERM_INFINITE_CHANCE 0
+#define MAX_ATTENTION 5
 
 #define CPU_ONLY_MAX 25
 #define IO_ONLY_MAX 50
@@ -60,7 +61,7 @@
 #define PCB_UNDEFINED_ERROR 571
 
 #define PCB_DEBUG false
-#define PCB_TOSTRING_LEN 180
+#define PCB_TOSTRING_LEN 250 
 
 #define LAST_PAIR mutual_A
 
@@ -84,10 +85,13 @@ struct PCB {
   bool io;               // io or cpu intensive
   enum process_type type;   // thread relation to other processes
   unsigned short priority;  // priorities 0=highest, LOWEST_PRIORITY=lowest
+  unsigned short orig_priority;// og priority
   enum state_type state;    // process state (running, waiting, etc.)
   word timeCreate;
   word timeTerminate;
   word lastClock;           // for starvation check
+  word attentionCount;      //times it has been given upgraded attention
+  bool promoted;
 };
 
 union regfile {

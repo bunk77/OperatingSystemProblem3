@@ -2,6 +2,7 @@
 // Created by chris on 5/17/2016.
 //
 #include "vector.h"
+#include "list.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -38,25 +39,28 @@ VECTOR_LISTp VECTOR_LIST_construct(element_interface_t *interface) {
 void  VECTOR_LIST_add(VECTOR_LISTp this, void* value) {
     this->size++;
     vector_list_expand(this);
-    this->vector[this->size] = value;
+    this->vector[this->size-1] = value;
 }
 
 
-void  VECTOR_LIST_set(VECTOR_LISTp this, void* value, uint64_t i) {
+void  VECTOR_LIST_set(VECTOR_LISTp this, uint64_t i, void* value) {
     this->vector[i] = value;
 }
 
-void  VECTOR_LIST_insert(VECTOR_LISTp this, void* value, uint64_t i) {
+void  VECTOR_LIST_insert(VECTOR_LISTp this, uint64_t i, void* value) {
     uint64_t j = ++this->size;
     vector_list_expand(this);
-    memmove(this->vector + i + 1, this->vector + i, sizeof(void*) * (this->size - i));
+
+    memmove(this->vector + i + 1,
+            this->vector + i,
+            sizeof(void*) * this->size);
     this->vector[i] = value;
 }
 
 void* VECTOR_LIST_remove(VECTOR_LISTp this, uint64_t i) {
-    void* value = this->vector[i];
+    void* value = this->vector[--i];
     this->size--;
-    memmove(this->vector + i, this->vector + i + 1, sizeof(void*) * (this->size - i - 1));
+    memmove(this->vector + i, this->vector + i + 1, sizeof(void*) * (this->size - i));
     return value;
 }
 
@@ -73,6 +77,27 @@ uint64_t VECTOR_LIST_size(VECTOR_LISTp this) {
     return this->size;
 }
 
+
+char* VECTOR_LIST_to_string(VECTOR_LISTp this, char* buffer) {
+    char tmp[1000];
+    uint64_t len;
+    uint64_t i;
+
+    buffer[0] = '[';
+    buffer[1] = '\0';
+    for(i = 0; i < this->size; i++) {
+
+        strcat(buffer, this->interface->to_string(this->vector[i],tmp));
+        strcat(buffer, ", ");
+    }
+    len = strlen(buffer);
+    buffer[len - 2] = ']';
+    buffer[len - 1] = '\0';
+    return buffer;
+
+}
+
+
 // BEGINNING OF ITERATOR METHODS
 VECTOR_LIST_itrerator_p VECTOR_LIST_get_itr(VECTOR_LISTp this) {
     VECTOR_LIST_itrerator_p new_itr = malloc(sizeof(struct vector_list_iterator));
@@ -86,6 +111,7 @@ VECTOR_LIST_itrerator_p VECTOR_LIST_get_itr(VECTOR_LISTp this) {
 void* VECTOR_LIST_iterator_next(VECTOR_LIST_itrerator_p this) {
     if(this->primed) {
         this->index++;
+    } else {
         this->primed = true;
     }
     return this->list->vector[this->index];
@@ -98,7 +124,9 @@ void* VECTOR_LIST_iterator_peek(VECTOR_LIST_itrerator_p this) {
 void VECTOR_LIST_iterator_remove(VECTOR_LIST_itrerator_p this) {
     if(this->primed) {
         VECTOR_LIST_remove(this->list, this->index);
+        this->primed = false;
         this->list->size--;
+
     } else {
         fprintf(stderr, "ILLEGAL_STATE_EXCEPTION: the next method has not yet"
             " been called, or the remove method has already been called after"
@@ -120,11 +148,11 @@ void VECTOR_LIST_iterator_destruct(VECTOR_LIST_itrerator_p this) {
 }
 
 static void vector_list_expand(VECTOR_LISTp this) {
-    if (this->vector_size > this->size) {
+    if (this->vector_size < this->size) {
         this->vector_size <<= 2;
         void** tmp = malloc(sizeof(void*) * this->vector_size);
 
-        memmove(tmp, this->vector, this->size);
+        memcpy(tmp, this->vector, sizeof(void*) * this->size);
         free(this->vector);
         this->vector = tmp;
     }

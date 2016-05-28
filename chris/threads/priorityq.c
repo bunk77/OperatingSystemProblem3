@@ -61,6 +61,7 @@ void* PRIORITYQ_peek(PRIORITYQp this) {
             if (FIFOQ_size(this->vector[i]) != 0) {
                 return ((priorityq_node_t) FIFOQ_peek(this->vector[i]))->item;
             }
+
         }
     }
     // TODO:handle no elements found

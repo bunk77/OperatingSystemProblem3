@@ -35,6 +35,7 @@
 typedef struct thread* thread_type;
 typedef struct mutex_lock* mutex_lock_type;
 typedef struct cond_var* cond_var_type;
+
 typedef void* thread_arguments;
 typedef void* (*top_level_procedure)(thread_arguments args);
 
@@ -100,7 +101,7 @@ void thread_join(thread_type tid, thread_type peer_thread_id);
  * @return 0 if execution success 1 if the lock is not currently held by the
  *           calling thread.
  */
-uint64_t thread_cond_wait(thread_type tid, cond_var_type buf_not_empty, mutex_lock_type buflock)
+uint64_t thread_cond_wait(thread_type tid, cond_var_type buf_not_empty, mutex_lock_type buflock);
 
 /**
  * A thread (if any) waiting on the condition variable buf_not_empty is woken

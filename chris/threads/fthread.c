@@ -3,10 +3,8 @@
 //
 #include <stdlib.h>
 #include "fthread.h"
-#include "fifoq.h"
-//enum stat {created, ready, running, interrupted, blocked, terminated};
-typedef struct thread_condition *thread_condition_type;
 
+typedef struct thread_condition *thread_condition_t;
 struct mutex_lock {
     FIFOQp waiting;
 };
@@ -73,7 +71,7 @@ void thread_terminate(thread_type tid) {
  * @param mylock lock requested
  */
 void thread_mutex_lock(thread_type tid, mutex_lock_type mylock) {
-    if (FIFOQ_size(mylock->waiting) != 0 || !FIFOQ_peek(mylock->waiting) == tid ) {
+    if (FIFOQ_size(mylock->waiting) != 0 || FIFOQ_peek(mylock->waiting) == tid) {
         FIFOQ_enqueue(mylock->waiting, tid);
     }
 }
@@ -128,7 +126,7 @@ void thread_join(thread_type tid, thread_type peer_thread_id) {
 uint64_t thread_cond_wait(thread_type tid, cond_var_type buf_not_empty, mutex_lock_type buflock) {
     // does tid hold buflock?
     if (FIFOQ_peek(buflock->waiting) == tid) {
-        thread_condition_type cond = malloc(sizeof(struct thread_condition));
+        thread_condition_t cond = malloc(sizeof(struct thread_condition));
         cond->tid = FIFOQ_dequeue(buflock->waiting);
         cond->mutex = buflock;
         FIFOQ_enqueue(buf_not_empty->waiting, cond);
@@ -148,7 +146,7 @@ uint64_t thread_cond_wait(thread_type tid, cond_var_type buf_not_empty, mutex_lo
  */
 void thread_cond_signal(cond_var_type buf_not_empty) {
     while (FIFOQ_size(buf_not_empty->waiting) > 0) {
-        thread_condition_type cond = FIFOQ_dequeue(buf_not_empty->waiting);
+        thread_condition_t cond = FIFOQ_dequeue(buf_not_empty->waiting);
         free(cond);
     }
 }

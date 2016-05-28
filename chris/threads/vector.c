@@ -2,7 +2,6 @@
 // Created by chris on 5/17/2016.
 //
 #include "vector.h"
-#include "list.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -76,7 +75,6 @@ void VECTOR_LIST_destruct(VECTOR_LISTp this) {
 uint64_t VECTOR_LIST_size(VECTOR_LISTp this) {
     return this->size;
 }
-
 
 char* VECTOR_LIST_to_string(VECTOR_LISTp this, char* buffer) {
     char tmp[1000];

@@ -7,8 +7,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-
-typedef struct element_interface element_interface_t;
+#include "list.h"
 typedef struct vector_list* VECTOR_LISTp;
 typedef struct vector_list_iterator* VECTOR_LIST_itrerator_p;
 

@@ -107,6 +107,8 @@ void     cleanup         (int* error);
 void     queueCleanup    (FIFOq_p, char*, int* error);
 void     stackCleanup    ();
 void     nanosleeptest   ();
+void awakeStarvationDaemon(int* error); 
+
 //static void     run             (word *pc, int *error);
 
 #endif

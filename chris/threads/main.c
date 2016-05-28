@@ -5,11 +5,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
-#include"fthread.h"
 #include "linked_list.h"
 #include "fifoq.h"
 #include "priorityq.h"
 #include "vector.h"
+#include "fthread.h"
 
 char* int_to_string(void* this, char* buffer);
 int main(int argc, char* argv[]) {
@@ -93,7 +93,7 @@ int main(int argc, char* argv[]) {
     PRIORITYQ_enqueue(pqueue, (void*) 7, 2);
     printf("enqueued (7, 2) size: %ld\n", PRIORITYQ_size(pqueue));
     int i;
-    for (i = 0; i < 3; i++) {
+    for (i = 0; i < 2; i++) {
         printf("               peeked %d: %p,     size: %ld\n",
                i, PRIORITYQ_peek(pqueue), PRIORITYQ_size(pqueue));
         printf("new size %2ld, dequeued %d: %p, old size: %ld\n",
@@ -151,12 +151,10 @@ int main(int argc, char* argv[]) {
            bool_to_string(VECTOR_LIST_iterator_has_next(vitr)));
     VECTOR_LIST_iterator_destruct(vitr);
     VECTOR_LIST_destruct(vlist);
-    fthread_init();
     clock_t t = clock();
     //fwait(NULL, 5);
 
     printf ("just waited %ld seconds.\n",(clock()-t)/CLOCKS_PER_SEC);
-
     return EXIT_SUCCESS;
 }
 

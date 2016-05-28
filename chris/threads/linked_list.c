@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+
 typedef struct linked_list_node* linked_list_node_p;
 
 struct linked_list {
@@ -32,8 +33,9 @@ struct linked_list_iterator {
 
 LINKED_LISTp LINKED_LIST_construct(element_interface_t *interface) {
     LINKED_LISTp this = malloc(sizeof(struct linked_list));
-    this->follow = &this->first;
+    //linked_list_node_p dummy = malloc(sizeof(struct linked_list_node));
     this->first = NULL;
+    this->follow = &this->first;
     this->size = 0;
     this->interface = interface;
     return this;
@@ -54,7 +56,7 @@ void LINKED_LIST_set(LINKED_LISTp this, uint64_t i, void* value) {
     if (i == this->size - 1) {
         itr_node = this->last;
     } else {
-        itr_node = this->first;
+        itr_node = this->first->next;
         while(i-- > 0) {
             itr_node = itr_node->next;
         }

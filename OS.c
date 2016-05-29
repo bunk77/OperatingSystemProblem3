@@ -658,58 +658,7 @@ void scheduler(int* error) {
   
     schedules++;
     if (!(schedules % STARVATION_CHECK_FREQUENCY)) {
-        if (DEBUG) puts("~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?");
-        if (DEBUG) puts("Starvation Daemon");
-        int rank;
-        for (rank = 0; rank < PRIORITIES_TOTAL; rank++) {
-            Node_p curr = readyQ[rank]->head;
-            Node_p prev = curr;
-            Node_p next;
-            while(curr != NULL) {
-                if (DEBUG) printf(">PID of inspect: %lu while Rank: %d PCB rank: %hu, attentionRecieved: %lu\n", curr->data->pid, rank, curr->data->priority, curr->data->attentionCount);
-                if (DEBUG) printf("Wait time: %lu\n", (clock_ - curr->data->lastClock));
-                //if current recieved enough attention then remove, demote and set current to next
-                if (curr->data->attentionCount >= PROMOTION_ALLOWANCE) {
-                    if (DEBUG) puts("Demoting a process");
-                    if (DEBUG) printf(">Demoted PID: %lu while Rank: %d PCB rank: %hu attentionRecieved: %lu\n", curr->data->pid, rank, curr->data->priority, curr->data->attentionCount);
-                    next = FIFOq_remove_and_return_next(curr, prev, readyQ[rank]);
-                    curr->data->attentionCount = 0;
-                    curr->data->promoted = false;
-                    curr->data->priority = curr->data->orig_priority;
-                    FIFOq_enqueue(readyQ[curr->data->priority], curr, error);
-                    char pcbstr[PCB_TOSTRING_LEN];
-                    if (OUTPUT) printf(">Demoted:         %s\n", PCB_toString(curr->data, pcbstr, error));
-                    curr = next;
-                    if(curr == readyQ[rank]->head) {
-                        prev = curr;
-                    } 
-                } else if (rank > 0 && (clock_ - curr->data->lastClock) > STARVATION_CLOCK_LIMIT) {
-                    //remove current, promote current process, set current to next
-                    if (DEBUG) puts("Promoting a process");
-                    if (DEBUG) printf(">Promoted PID: %lu while Rank: %d PCB rank: %hu attentionRecieved: %lu\n", curr->data->pid, rank, curr->data->priority, curr->data->attentionCount);
-                    next = FIFOq_remove_and_return_next(curr, prev, readyQ[rank]);
-                    if(!curr->data->promoted) {
-                        curr->data->attentionCount = 0;
-                    } else {
-                        if (DEBUG) printf("Node PID: %lu\n promoted once again.\n", curr->data->pid);
-                    }
-                    char pcbstr[PCB_TOSTRING_LEN];
-                    if (OUTPUT) printf(">Promoted:        %s\n", PCB_toString(curr->data, pcbstr, error));                    
-                    curr->data->promoted = true;
-                    curr->data->priority = rank - 1;
-                    FIFOq_enqueue(readyQ[curr->data->priority], curr, error);
-                    curr = next;
-                    if(curr == readyQ[rank]->head) {
-                        prev = curr;
-                    } 
-                } else {
-                    prev = curr;
-                    curr = curr->next_node;
-                }
-            }
-        }
-        if (DEBUG) puts("~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?");
-        
+        awakeStarvationDaemon(error);
     }
 
     for (r = 0; r < PRIORITIES_TOTAL; r++)
@@ -759,6 +708,78 @@ void scheduler(int* error) {
 
 }
 
+/**
+ * Checks if any pcb's in the waiting queue need to be promoted due to starvation or
+ * demoted due to being promoted and recieving enough attention.
+ * @param error - error collects all the error signals.
+ */
+void awakeStarvationDaemon(int *error) {
+  
+    if (DEBUG) puts("~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?");
+    if (DEBUG) puts("Starvation Daemon");
+    int rank;
+    for (rank = 0; rank < PRIORITIES_TOTAL; rank++) {
+        Node_p curr = readyQ[rank]->head;
+        Node_p prev = curr;
+        Node_p next;
+        while(curr != NULL) {
+            if (DEBUG) printf(">PID of inspect: %lu while Rank: %d PCB rank: "
+                              "%hu, attentionRecieved: %lu\n",
+                              curr->data->pid, rank, curr->data->priority,
+                              curr->data->attentionCount);
+            if (DEBUG) printf("Wait time: %lu\n", (clock_ - curr->data->lastClock));
+            //if current recieved enough attention then remove, demote and set current to next
+            if (curr->data->attentionCount >= PROMOTION_ALLOWANCE) {
+                if (DEBUG) puts("Demoting a process");
+                if (DEBUG) printf(">Demoted PID: %lu while Rank: %d PCB rank:"
+                                  " %hu attentionRecieved: %lu\n", 
+                                  curr->data->pid, rank, curr->data->priority,
+                                  curr->data->attentionCount);
+                next = FIFOq_remove_and_return_next(curr, prev, readyQ[rank]);
+                curr->data->attentionCount = 0;
+                curr->data->promoted = false;
+                curr->data->priority = curr->data->orig_priority;
+                FIFOq_enqueue(readyQ[curr->data->priority], curr, error);
+                char pcbstr[PCB_TOSTRING_LEN];
+                if (OUTPUT) printf(">Demoted:         %s\n", PCB_toString(curr->data, pcbstr, error));
+                curr = next;
+                if(curr == readyQ[rank]->head) {
+                    prev = curr;
+                } 
+            } else if (rank > 0 && (clock_ - curr->data->lastClock) > STARVATION_CLOCK_LIMIT) {
+                //remove current, promote current process, set current to next
+                if (DEBUG) puts("Promoting a process");
+                if (DEBUG) printf(">Promoted PID: %lu while Rank: %d PCB rank: "
+                                  "%hu attentionRecieved: %lu\n", 
+                                  curr->data->pid, rank, curr->data->priority, 
+                                  curr->data->attentionCount);
+
+                next = FIFOq_remove_and_return_next(curr, prev, readyQ[rank]);
+                if(!curr->data->promoted) {
+                    curr->data->attentionCount = 0;
+                } else {
+                    if (DEBUG) printf("Node PID: %lu\n promoted once again.\n", curr->data->pid);
+                }
+                char pcbstr[PCB_TOSTRING_LEN];
+                if (OUTPUT) printf(">Promoted:        %s\n", PCB_toString(curr->data, pcbstr, error));                    
+                curr->data->promoted = true;
+                curr->data->priority = rank - 1;
+                FIFOq_enqueue(readyQ[curr->data->priority], curr, error);
+                curr = next;
+                if(curr == readyQ[rank]->head) {
+                    prev = curr;
+                } 
+            } else {
+                prev = curr;
+                curr = curr->next_node;
+            }
+        }
+    }
+    if (DEBUG) puts("~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?~?");
+  
+
+
+}
 /* Dispatches a new current process by dequeuing the head of the ready queue,
  * setting its state to running and copying its CPU state onto the stack.
  */

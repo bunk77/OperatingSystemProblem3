@@ -11,7 +11,7 @@ PCB.o: PCB.c PCB.h
 	gcc -c PCB.c
 
 clean:
-	rm -f problem3.exe OS.o FIFOq.o PCB.o
+	rm -f problem3.exe OS.o FIFOq.o PCB.o u3.exe
 
 debugging:
 	gcc -g -Wall OS.c FIFOq.c PCB.c -o u3

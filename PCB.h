@@ -53,6 +53,7 @@
 #define DEFAULT_STATE created
 #define DEFAULT_PC 0Lu
 #define DEFAULT_SW 0Lu
+#define DEFAULT_TIME_TERMINATE 0lu
 
 #define PCB_NULL_ERROR 547
 #define PCB_INIT_ERROR 557

@@ -49,7 +49,7 @@ PCB_p PCB_construct(int *ptr_error) {
     this->priority = -1;
     this->state = nostate;
     this->timeCreate = -1;
-    this->timeTerminate = -1;
+    this->timeTerminate = DEFAULT_TIME_TERMINATE;
     this->lastClock = -1;
     for (r = 0; r < REGNUM; r++)
         this->regs->gpu[r] = -1;
@@ -163,7 +163,7 @@ int PCB_init(PCB_p this) {
         if (this->priority < 0) error += PCB_PRIORITY_ERROR;
         this->state = DEFAULT_STATE;
         //this->timeCreate = 0;
-        //this->timeTerminate = 0;
+        this->timeTerminate = DEFAULT_TIME_TERMINATE;
         REG_init(this->regs, &error);
     }
     return error;
@@ -391,13 +391,22 @@ char * PCB_toString(PCB_p this, char *str, int *ptr_error) {
     int error = (this == NULL || str == NULL) * PCB_NULL_ERROR;
     if (!error) {
         str[0] = '\0';
-//        const char * format = "PID: 0x%04lx  PC: 0x%05lx  State: %s  Priority 0x%x";
-//        snprintf(str, (size_t) PCB_TOSTRING_LEN - 1, format, this->pid, this->regs->reg.pc, STATE[this->state], this->priority);
         char regString[PCB_TOSTRING_LEN - 1];
-        const char * format = "PID: 0x%04lx  PC: 0x%05lx  State: %s  Priority: 0x%x  Intensity: %s  Type: %s  %s";
-        snprintf(str, (size_t) PCB_TOSTRING_LEN - 1, format, this->pid, this->regs->reg.pc, 
-                 STATE[this->state], this->orig_priority, this->io? "IO" : "CPU", TYPE[this->type],
-                 Reg_File_toString(this->regs, regString, ptr_error));
+        if (this->timeTerminate == DEFAULT_TIME_TERMINATE) {
+            const char * format = "PID: 0x%04lx  PC: 0x%05lx  State: %s  Priority: 0x%x  Intensity: %s  Type: %s  %s TimeCreate: %lu";
+            snprintf(str, (size_t) PCB_TOSTRING_LEN - 1, format, this->pid, this->regs->reg.pc, 
+                    STATE[this->state], this->orig_priority, this->io? "IO" : "CPU", TYPE[this->type],
+                    Reg_File_toString(this->regs, regString, ptr_error), this->timeCreate);
+
+
+        } else {
+            const char * format = "PID: 0x%04lx  PC: 0x%05lx  State: %s  Priority: 0x%x  Intensity: %s  Type: %s  %s TimeCreate: %lu TimeTerminate: %lu";
+            snprintf(str, (size_t) PCB_TOSTRING_LEN - 1, format, this->pid, this->regs->reg.pc, 
+                    STATE[this->state], this->orig_priority, this->io? "IO" : "CPU", TYPE[this->type],
+                    Reg_File_toString(this->regs, regString, ptr_error), this->timeCreate, this->timeTerminate);
+
+        }
+
     }
 
     if (ptr_error != NULL) {

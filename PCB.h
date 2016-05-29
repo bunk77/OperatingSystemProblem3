@@ -25,7 +25,7 @@
 #define max(x,y) (  ((x) > (y)) ? (x) : (y)  )
 #define min(x,y) (  ((x) < (y)) ? (x) : (y)  )
 
-#define REGNUM (REG_COUNT + IO_NUMBER*IO_CALLS)
+#define REGNUM (REG_COUNT + IO_NUMBER*IO_CALLS + CALL_NUMBER*2)
 #define PRIORITIES_TOTAL 4
 #define LOWEST_PRIORITY (PRIORITIES_TOTAL - 1)
 #define PRIORITY_0_CHANCE 5  //must be defined
@@ -36,11 +36,14 @@
 #define PRIORITY_UNIQUE_UPTO 3
 #define IO_NUMBER 2
 #define IO_CALLS 4
+#define CALL_NUMBER 6
 #define REG_COUNT 5
 
-#define MAX_PC_MIN 50
-#define MAX_PC_RANGE 3000
-#define MIN_IO_CALL 25
+#define MAX_PC_MIN (MIN_THREAD_CALL + (THREAD_CALL * (CALL_NUMBER+1))) //1000
+#define MAX_PC_RANGE (MAX_PC_MIN * 3)
+#define MIN_IO_CALL 250
+#define THREAD_CALL 100
+#define MIN_THREAD_CALL (THREAD_CALL * 3) //must be product of THREAD_CALL
 #define TERM_RANGE 10
 #define TERM_INFINITE_CHANCE 0
 #define MAX_ATTENTION 5
@@ -49,6 +52,8 @@
 #define IO_ONLY_MAX 50
 #define PROCON_PAIR_MAX 10   //x2; pair count
 #define MUTUAL_PAIR_MAX 10   //x2; pair count
+#define MAX_SHARED_RESOURCES (PROCON_PAIR_MAX + MUTUAL_PAIR_MAX)
+#define MUTUAL_MAX_RESOURCES 2
 
 #define DEFAULT_STATE created
 #define DEFAULT_PC 0Lu
@@ -59,11 +64,20 @@
 #define PCB_OTHER_ERROR 563
 #define PCB_PRIORITY_ERROR 569
 #define PCB_UNDEFINED_ERROR 571
+#define PCB_RESOURCE_ERROR 577
 
 #define PCB_DEBUG false
 #define PCB_TOSTRING_LEN 250 
 
 #define LAST_PAIR mutual_A
+#define CODE_LOCK 10000
+#define CODE_UNLOCK 20000
+#define CODE_WAIT_T 30000
+#define CODE_WAIT_F 40000
+#define CODE_SIGNAL 50000
+#define CODE_READ 60000
+#define CODE_WRITE 70000
+#define CODE_FLAG 80000
 
 typedef enum {false, true} bool;
 enum state_type {created = 0, ready, running, waiting, interrupted, blocked, terminated, nostate};
@@ -91,13 +105,14 @@ struct PCB {
   word timeTerminate;
   word lastClock;           // for starvation check
   word attentionCount;      //times it has been given upgraded attention
+  word group;
   bool promoted;
 };
 
 union regfile {
             //save to PCB from system
     struct {
-        word pc, MAX_PC, sw, term_count, TERMINATE, IO_TRAPS[IO_NUMBER][IO_CALLS];
+        word pc, MAX_PC, sw, term_count, TERMINATE, IO_TRAPS[IO_NUMBER][IO_CALLS], CALLS[CALL_NUMBER], CODES[CALL_NUMBER];
     } reg;
     word gpu[REGNUM];
 };

@@ -62,7 +62,7 @@
 #define SYSTEM_RUNS 1
 
 //ERRORS
-#define OS_NO_ERROR EXIT_SUCCESS
+#define OS_NO_ERROR 0//EXIT_SUCCESS
 #define STACK_ERROR_DEFAULT 0
 #define CPU_NULL_ERROR 71
 #define CPU_STACK_ERROR 73
@@ -75,6 +75,14 @@ struct CPU {
   REG_p regs;
 };
 
+struct shared_resource {
+    int members;
+    //fmutex[MUTUAL_MAX_RESOURCES];
+    //fcond[MUTUAL_MAX_RESOURCES];
+    bool flag[MUTUAL_MAX_RESOURCES];
+    word resource[MUTUAL_MAX_RESOURCES];
+};
+
 struct io_thread_type {
     thread THREAD_io;
     mutex MUTEX_io;
@@ -85,6 +93,7 @@ struct io_thread_type {
 };
 
 typedef struct io_thread_type* io_thread;
+typedef struct shared_resource* PCB_r;
 
 //extern word SsyStack[SYSSIZE];
 //extern int SysPointer;
@@ -95,17 +104,22 @@ void*    timer           (void*);
 void*    io              (void*);
 void     trap_terminate  (int* error);
 void     trap_iohandler  (const int T, int* error);
+void     trap_mutexhandler(const int T, int* error);
+void     trap_requehandler(const int T, int* error);
 void     interrupt       (const int INTERRUPT, void*, int* error);
 void     isr_timer       (int* error);
 void     isr_iocomplete  (const int IO, int* error);
 void     scheduler       (int* error);
 void     dispatcher      (int* error);
-int      createPCBs  	 (int *error);
+int      createPCBs  	 (int *error); 
+void     mutexPair       (PCB_r, int* error);
+void     mutexEmpty      (PCB_r, int* error);
 void      sysStackPush    (REG_p, int* error);
 void      sysStackPop     (REG_p, int* error);
 void     cleanup         (int* error);
 void     queueCleanup    (FIFOq_p, char*, int* error);
 void     stackCleanup    ();
+void     mutexCleanup    (PCB_r, int* error);
 void     nanosleeptest   ();
 //static void     run             (word *pc, int *error);
 

@@ -26,6 +26,10 @@ static word clock_;
 /*IO*/
 static io_thread IO[IO_NUMBER];
 
+/*Shared Resources for PCBs*/
+static PCB_r empty;
+static PCB_r group[MAX_SHARED_RESOURCES+1];
+
 /*OS only declarations for current and idle processes*/
 static PCB_p current;
 static PCB_p idl;
@@ -106,6 +110,13 @@ int bootOS() {
     pthread_mutex_init(&MUTEX_timer, NULL);
     pthread_cond_init(&COND_timer, NULL);
     pthread_create(&THREAD_timer, NULL, timer, NULL);
+    
+    //shared resources
+    empty = (PCB_r) malloc(sizeof(struct shared_resource));
+    empty->members = 0;
+//    mutexPair(empty, &boot_error);
+    for (t = 0; t < MAX_SHARED_RESOURCES; t++)
+        group[t] = empty;
 
     //IO
     for (t = 0; t < IO_NUMBER; t++) {
@@ -178,6 +189,7 @@ int mainLoopOS(int *error) {
     word * const term_count = &(CPU->regs->reg.term_count);
     word * const TERMINATE = &(CPU->regs->reg.TERMINATE);
     word(* const IO_TRAPS)[IO_NUMBER][IO_CALLS] = &(CPU->regs->reg.IO_TRAPS);
+    
 
     int exit = 0;
 
@@ -246,6 +258,7 @@ int mainLoopOS(int *error) {
                 pthread_mutex_unlock(&MUTEX_timer);
                 if (context_switch || PCB_SCHEDULE_EVERY) {
                     if (DEBUG) printf("At cycle PC = %lu, timer interrupts %lu\n", *pc, current->pid);
+                    (*pc)--;
                     sysStackPush(CPU->regs, error);
                     
                     interrupt(INTERRUPT_TIMER, NULL, error);
@@ -260,6 +273,49 @@ int mainLoopOS(int *error) {
                 break;
             }
 
+            /*** THREAD CHECK ***/
+            if (current->type > regular && current->type <= (LAST_PAIR * 2)) {
+                bool waitforbuddy = false;
+                bool reentry = false;
+                for (t = 0; t < CALL_NUMBER; t++)
+                    if (*pc == current->regs->reg.CALLS[t]) {
+        /* erase this */if (0) { //erase this line and corresponding } when ready
+                        word call = current->regs->reg.CODES[t] & -2; //truncates 1's place
+                        word resource = current->regs->reg.CODES[t] & 1; //1's place
+                        switch (call) {
+                            case CODE_LOCK:
+                                /* if (lock(current, group[current->group]->mutex[resource])
+                                    waitforbuddy = true; */ break;
+                            case CODE_UNLOCK: reentry = true; t *= -1; break;
+                            case CODE_WAIT_T:
+                                /* if (group[current->group]->flag[resource]) { //flag is true
+                                    wait(current, group[current->group]->cond[resource], group[current->group]->mutex[resource]);
+                                    waitforbuddy = true;
+                                }*/ break;
+                            case CODE_WAIT_F:
+                                /* if (!group[current->group]->flag[resource]) {//flag is false
+                                    wait(current, group[current->group]->cond[resource], group[current->group]->mutex[resource]);
+                                    waitforbuddy = true;
+                                }*/ break;
+                            case CODE_SIGNAL: reentry = true; break;
+                            case CODE_READ: (*sw) = group[current->group]->resource[resource]; break;
+                            case CODE_WRITE: (group[current->group]->resource[resource])++; break;
+                            case CODE_FLAG: group[current->group]->flag[resource] = !(group[current->group]->flag[resource]); break;
+                        }
+        /* erase this */} //erase this and corresponding if (0) { when ready
+                        break;
+                    }
+                if (waitforbuddy || reentry) {
+                    sysStackPush(CPU->regs, error);
+                    if (waitforbuddy) trap_mutexhandler(t, error);
+                    else if (reentry) trap_requehandler(t, error);
+                    sysStackPop(CPU->regs, error);
+                    continue;
+                }
+            }
+                       
+                        
+            
             /*** IO CHECK ***/
             if (DEBUG) printf("Checking IO if complete \n");
             for (t = 0; t < IO_NUMBER; t++)
@@ -295,7 +351,7 @@ int mainLoopOS(int *error) {
                         pthread_cond_signal(&(IO[t]->COND_io));
                         if (DEBUG) printf("At cycle PC = %lu, process %lu begins\n", *pc, current->pid);
                         break;
-                    } 
+                    }
             if (current != idl && current->pid > MAX_PROCESSES) {
                 if (EXIT_STATUS_MESSAGE) printf("post-trap: pcb with pid %lu exceeds max processes, exiting system\n", current->pid);
                 break;
@@ -317,6 +373,7 @@ int mainLoopOS(int *error) {
     /**************************************************************************/
     /*************************** *********** **********************************/
     /**************************************************************************/
+    
     if (DEBUG) printf("Main loop OS stop\n");
 
     sysStackPush(CPU->regs, error);
@@ -429,6 +486,15 @@ void trap_terminate(int* error) {
     current->timeTerminate = clock_;
     current->priority = current->orig_priority;
     closeable--;
+    if (current->group) {
+        int g = current->group;
+        group[current->group]->members--;
+        if (group[current->group]->members == 0) {
+            //mutexEmpty(group[current->group], error);    
+            free(group[g]);
+            group[g] = empty;
+        }
+    }
     char pcbstr[PCB_TOSTRING_LEN];
     if (OUTPUT) printf(">Terminated:      %s\n", PCB_toString(current, pcbstr, error));
 
@@ -446,6 +512,35 @@ void trap_iohandler(const int t, int* error) {
     FIFOq_enqueuePCB(IO[t]->waitingQ, current, error);
     if (THREAD_DEBUG) printf("\t\tIO %d: gained PCB\n", t + FIRST_IO);
     scheduler(error);
+}
+
+void trap_mutexhandler(const int t, int* error) {
+    sysStackPop(current->regs, error);
+    current->state = blocked;
+    char pcbstr[PCB_TOSTRING_LEN];       //%s
+    if (OUTPUT) printf(">Group %d enqueue: %s\n", t, PCB_toString(current, pcbstr, error));
+    
+   //current already enqueued in mutex/cond
+    if (THREAD_DEBUG) printf("\t\tGroup %d: gained PCB\n", t);
+    scheduler(error);
+}
+
+void trap_requehandler(const int t, int* error) {
+    PCB_p pcb; // 
+    if (t<0) pcb = NULL; //unlock(current, group[current->group]->mutex[t]);
+    else pcb = NULL; //signal(group[current->group]->cond[t]);  
+    
+    if (pcb != NULL) {
+        pcb->state = ready;
+        pcb->lastClock = clock_; //to track starvation
+        if (pcb->promoted) {
+            pcb->attentionCount++;
+        }
+        FIFOq_enqueuePCB(readyQ[pcb->priority], pcb, error);
+        char pcbstr[PCB_TOSTRING_LEN];       //%s
+        if (OUTPUT) printf(">Group %d dequeue: %s\n", t, PCB_toString(pcb, pcbstr, error));
+
+    }
 }
 
 /******************************************************************************/
@@ -520,6 +615,7 @@ void scheduler(int* error) {
     bool pcb_idl = current == idl;
     bool pcb_term = current->state == terminated;
     bool pcb_io = current->state == waiting;
+    bool pcb_mtx = current->state == blocked;
     
     if (createQ == NULL) {
         *error += FIFO_NULL_ERROR;
@@ -553,7 +649,7 @@ void scheduler(int* error) {
             break;
     
     if (r == PRIORITIES_TOTAL) {// ||current->pid == readyQ[r]->head->data->pid)  //nothing in any ready queues
-        if (pcb_term || pcb_io) //or in locks or conds
+        if (pcb_term || pcb_io || pcb_mtx)
             current = idl;
         PCB_setState(current, running);
         sysStackPush(current->regs, error);
@@ -576,7 +672,7 @@ void scheduler(int* error) {
         printf(">Switching to:    %s\n", PCB_toString(readyQ[r]->head->data, rdqstr, error));
     }
     //if it's a timer interrupt
-    if (!pcb_idl && !pcb_term && !pcb_io) { //add stuff about locks and conds
+    if (!pcb_idl && !pcb_term && !pcb_io && !pcb_mtx) { //add stuff about locks and conds
         current->state = ready;
         current->lastClock = clock_;
         if (current->promoted) {
@@ -601,6 +697,8 @@ void scheduler(int* error) {
             printf(">Exited system:   %s\n", PCB_toString(terminateQ->tail->data, rdqstr, error));
         else if (pcb_io)
             printf(">Requested I/O:   %s\n", PCB_toString(pcb, rdqstr, error));
+        else if (pcb_mtx)
+            printf(">Mutex lock/wait: %s\n", PCB_toString(pcb, rdqstr, error));
         int stz = FIFOQ_TOSTRING_MAX;
         char str[stz];
         if (OUTPUT) printf(">Priority %d %s\n", r, FIFOq_toString(readyQ[r], str, &stz, error));
@@ -723,6 +821,7 @@ int createPCBs(int *error) {
         return OS_NO_ERROR;
     // random number of new processes between 0 and 5
     static int processes_created = 0;
+    static int g = 0;
 
     if (processes_created >= MAX_PROCESSES)
         return -1;
@@ -749,6 +848,7 @@ int createPCBs(int *error) {
     if (CREATEPCB_DEBUG) printf("createPCBs: creating up to %d PCBs and enqueueing them to createQ\n", r);
     for (i = 0; i < r; i++) {
         
+        
         if (!PCBs_available()) {
             r = i;
             if (CREATEPCB_DEBUG) printf("all pcbs used up; %d pcbs created\n", r);
@@ -763,8 +863,34 @@ int createPCBs(int *error) {
         newPcb->timeCreate = clock_;
         newPcb->lastClock = clock_;
         closeable += newPcb->regs->reg.TERMINATE > 0;
-        
-        
+        char *TYPE[] = {"regular", "producer", "mutual_A", "consumer", "mutual_B", "undefined"};
+
+        if (!g && newPcb->type > regular && newPcb->type <= LAST_PAIR) {
+            for (g = 1; g < MAX_SHARED_RESOURCES; g++)
+                if (group[g] == empty) break;
+            if (g == MAX_SHARED_RESOURCES) {
+                printf("ERROR: max_resource exceeded: %s\n", TYPE[newPcb->type]);
+                *error += PCB_RESOURCE_ERROR;
+            } else {
+                //mutexPair(group[g], error);
+                group[g] = (PCB_r) malloc(sizeof(struct shared_resource));
+                group[g]->members = 0;
+                newPcb->group = g;
+                group[g]->members++;
+            }
+
+        } else if (g) {
+            if (newPcb->type <= LAST_PAIR || newPcb->type == undefined) {
+                printf("ERROR: second pair not of pair type: %s + %d\n", TYPE[newPcb->type], g);
+                *error += PCB_RESOURCE_ERROR;
+
+            } else {
+                newPcb->group = g;
+                group[g]->members++;
+                g = 0;
+            }
+            
+        }
         
         if (CREATEPCB_DEBUG) printf("New PCB created: %s\n", PCB_toString(newPcb, buffer, error));
         FIFOq_enqueuePCB(createQ, newPcb, error);
@@ -774,6 +900,33 @@ int createPCBs(int *error) {
     if (!first_batch) first_batch = r;
     if (CREATEPCB_DEBUG) printf("total created pcbs: %d and exit = %d\n", processes_created, (processes_created >= MAX_PROCESSES ? -1 : 0));
     return (processes_created >= MAX_PROCESSES ? -2 : 0);
+}
+
+void mutexPair(PCB_r group, int* error) {
+    if (group != empty && group != NULL) *error += PCB_RESOURCE_ERROR;
+    group = (PCB_r) malloc(sizeof(struct shared_resource));
+    group->members = 0;
+    int g;
+    for (g = 0; g < MUTUAL_MAX_RESOURCES; g++) { //instantiate group members such as mutex, conds, in loop
+        //group->mutex[g] = malloc
+        //group->cond[g] = malloc
+        group->flag[g] = true;
+        group->resource[g] = 0;
+    }
+    
+}
+
+void mutexEmpty(PCB_r group, int* error) {
+    if (group != empty && group != NULL) {
+        int g;
+        for (g = 0; g < MUTUAL_MAX_RESOURCES; g++) { //deallocate group members such as mutex, conds, in loop
+            //group->mutex[g] = malloc
+            //group->cond[g] = malloc
+            1+1;
+        }
+        free(group);
+        group = empty;
+    }    
 }
 
 /******************************************************************************/
@@ -844,6 +997,15 @@ void cleanup(int* error) {
     pthread_cond_destroy(&COND_timer);
 
     queueCleanup(terminateQ, "terminateQ", error);
+    
+    for (t = 0; t < MAX_SHARED_RESOURCES; t++)
+        if (group[t] != empty) {
+            //deallocation
+            free(group[t]);
+            group[t] = NULL;
+        }
+    free(empty);
+    empty = NULL;
     
     for (t = 0; t < IO_NUMBER; t++) {
         char wQ[12] = "waitingQ_x";

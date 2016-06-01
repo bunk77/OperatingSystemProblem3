@@ -10,6 +10,14 @@
 char *STATE[] = {"created", "ready", "running", "waiting", "interrupted", "blocked", "terminated", "nostate"};
 char *TYPE[] = {"regular", "producer", "mutual_A", "consumer", "mutual_B", "undefined"};
 
+word CODE_TYPE[(LAST_PAIR*2)+1][CALL_NUMBER] = { {0,0,0,0,0,0},
+    /* producer */ { CODE_LOCK+0, CODE_WAIT_F+0, CODE_WRITE+0, CODE_FLAG+0, CODE_SIGNAL+0, CODE_UNLOCK+0 },
+    /* consumer */ { CODE_LOCK+0, CODE_WAIT_T+0, CODE_READ+0, CODE_FLAG+0, CODE_SIGNAL+0, CODE_UNLOCK+0 },
+    /* mutual_a */ { CODE_LOCK+0, CODE_LOCK+1, CODE_WRITE+0, CODE_WRITE+1, CODE_UNLOCK+1, CODE_UNLOCK+0 },
+    /* mutual_b */ { CODE_LOCK+1, CODE_LOCK+0, CODE_WRITE+0, CODE_WRITE+1, CODE_UNLOCK+0, CODE_UNLOCK+1 },
+};
+
+
 static int PRIORITIES[] = {PRIORITY_0_CHANCE, PRIORITY_1_CHANCE,
                            PRIORITY_2_CHANCE, PRIORITY_3_CHANCE,
                            PRIORITY_OTHER_CHANCE};
@@ -51,6 +59,7 @@ PCB_p PCB_construct(int *ptr_error) {
     this->timeCreate = -1;
     this->timeTerminate = DEFAULT_TIME_TERMINATE;
     this->lastClock = -1;
+    this->group = 0;
     for (r = 0; r < REGNUM; r++)
         this->regs->gpu[r] = -1;
     if (ptr_error != NULL) {
@@ -165,6 +174,11 @@ int PCB_init(PCB_p this) {
         //this->timeCreate = 0;
         this->timeTerminate = DEFAULT_TIME_TERMINATE;
         REG_init(this->regs, &error);
+        int c;
+        if (this->type != regular && this->type <= LAST_PAIR*2)
+            for (c = 0; c < CALL_NUMBER; c++)
+                this->regs->reg.CODES[c] = CODE_TYPE[this->type][c];
+        
     }
     return error;
 }
@@ -192,6 +206,7 @@ REG_p REG_init(REG_p this, int *ptr_error) {
     else {
         int t;
         int j;
+        int thread_step;
         this->reg.pc = DEFAULT_PC;
         this->reg.MAX_PC = rand() % (MAX_PC_RANGE + 1 - MAX_PC_MIN) + MAX_PC_MIN;
         this->reg.sw = DEFAULT_SW;
@@ -200,10 +215,18 @@ REG_p REG_init(REG_p this, int *ptr_error) {
         for (t = 0; t < IO_NUMBER * IO_CALLS; t++)
             this->reg.IO_TRAPS[(int) (t / IO_CALLS)][t % IO_CALLS] = MIN_IO_CALL + (rand() % (this->reg.MAX_PC - MIN_IO_CALL));
         for (t = 0; t < IO_NUMBER * IO_CALLS; t++)
-            for (j = 0; j < t; j++)
-                if (this->reg.IO_TRAPS[(int) (j / IO_CALLS)][j % IO_CALLS] == 
-                    this->reg.IO_TRAPS[(int) (t / IO_CALLS)][t % IO_CALLS])
-                    this->reg.IO_TRAPS[(int) (j / IO_CALLS)][j % IO_CALLS] = -1; //duplicate values erased
+            if (!(this->reg.IO_TRAPS[(int) (t / IO_CALLS)][t % IO_CALLS] % THREAD_CALL))
+                this->reg.IO_TRAPS[(int) (t / IO_CALLS)][t % IO_CALLS] = -1; //dup
+            else
+                for (j = 0; j < t; j++)
+                    if (this->reg.IO_TRAPS[(int) (j / IO_CALLS)][j % IO_CALLS] == 
+                        this->reg.IO_TRAPS[(int) (t / IO_CALLS)][t % IO_CALLS])
+                        this->reg.IO_TRAPS[(int) (j / IO_CALLS)][j % IO_CALLS] = -1; //duplicate values erased
+        thread_step = THREAD_CALL * (int) (((this->reg.MAX_PC - MIN_THREAD_CALL) / CALL_NUMBER) / THREAD_CALL);
+        for (t = 0; t < CALL_NUMBER; t++) {
+            this->reg.CALLS[t] = MIN_THREAD_CALL + t * thread_step;
+            this->reg.CODES[t] = 0;
+        }
     }
     return this;
 }
@@ -392,17 +415,18 @@ char * PCB_toString(PCB_p this, char *str, int *ptr_error) {
     if (!error) {
         str[0] = '\0';
         char regString[PCB_TOSTRING_LEN - 1];
+
         if (this->timeTerminate == DEFAULT_TIME_TERMINATE) {
-            const char * format = "PID: 0x%04lx  PC: 0x%05lx  State: %s  Priority: 0x%x  Intensity: %s  Type: %s  %s TimeCreate: %lu";
+            const char * format = "PID: 0x%04lx  PC: 0x%05lx  State: %s  Priority: 0x%x  Intensity: %s  Type: %s  Group: %lu   %s TimeCreate: %lu";
             snprintf(str, (size_t) PCB_TOSTRING_LEN - 1, format, this->pid, this->regs->reg.pc, 
-                    STATE[this->state], this->orig_priority, this->io? "IO" : "CPU", TYPE[this->type],
+                    STATE[this->state], this->orig_priority, this->io? "IO" : "CPU", TYPE[this->type], this->group,
                     Reg_File_toString(this->regs, regString, ptr_error), this->timeCreate);
 
 
         } else {
-            const char * format = "PID: 0x%04lx  PC: 0x%05lx  State: %s  Priority: 0x%x  Intensity: %s  Type: %s  %s TimeCreate: %lu TimeTerminate: %lu";
+            const char * format = "PID: 0x%04lx  PC: 0x%05lx  State: %s  Priority: 0x%x  Intensity: %s  Type: %s  Group: %lu   %s TimeCreate: %lu TimeTerminate: %lu";
             snprintf(str, (size_t) PCB_TOSTRING_LEN - 1, format, this->pid, this->regs->reg.pc, 
-                    STATE[this->state], this->orig_priority, this->io? "IO" : "CPU", TYPE[this->type],
+                    STATE[this->state], this->orig_priority, this->io? "IO" : "CPU", TYPE[this->type],  this->group,
                     Reg_File_toString(this->regs, regString, ptr_error), this->timeCreate, this->timeTerminate);
 
         }
@@ -428,7 +452,7 @@ char * Reg_File_toString(REG_p this, char *str, int *ptr_error) {
     int error = (this == NULL || str == NULL) * PCB_NULL_ERROR;
     if (!error) {
         str[0] = '\0';
-        const char * format = "Max PC: 0x%05lx  Term Count: 0x%05lx  Terminate-on: 0x%05lx";
+        const char * format = "MaxPC: 0x%05lx  Rollover: 0x%05lx  Terminate: 0x%05lx";
         snprintf(str, (size_t) PCB_TOSTRING_LEN - 1, format, this->reg.MAX_PC, 
                 this->reg.term_count, this->reg.TERMINATE);
     }

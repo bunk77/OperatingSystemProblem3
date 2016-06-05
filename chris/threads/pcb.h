@@ -13,14 +13,12 @@
 #include <stdio.h>
 #include <time.h>
 #include <limits.h>
+#include <stdbool.h>
 #include "threadq.h"
 /* DOESN'T DISPLAY WARNINGS THAT ARE DUE TO ULONG WORD CAST */
 //words are ulongs, silly
 //#pragma GCC diagnostic ignored "-Wformat="
 #define created created_
-#define bool bool_
-#define true true_
-#define false false_
 
 #define max(x, y) (  ((x) > (y)) ? (x) : (y)  )
 #define min(x, y) (  ((x) < (y)) ? (x) : (y)  )
@@ -80,10 +78,6 @@
 #define CODE_WRITE 70000
 #define CODE_FLAG 80000
 
-typedef enum
-{
-    false, true
-} bool;
 enum state_type
 {
     created = 0,

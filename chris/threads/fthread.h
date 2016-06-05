@@ -27,11 +27,9 @@
  */
 #include <stdarg.h>
 #include <stdbool.h>
-#include "priorityq.h"
-#include "pcb.h"
+#include "threadq.h"
+//#include "pcb.h"
 
-#define success false
-#define failure true
 typedef struct thread* thread_type;
 typedef struct mutex_lock* mutex_lock_type;
 typedef struct cond_var* cond_var_type;
@@ -65,14 +63,14 @@ void thread_terminate(thread_type tid);
  *
  * @param mylock lock requested
  */
-void thread_mutex_lock(thread_type tid, mutex_lock_type mylock);
+bool thread_mutex_lock(thread_type tid, mutex_lock_type mylock);
 
 /**
  * If the thread currently has mylock it is released; error results otherwise.
  *
  * @return 0 if execution success 1 if mylock was already unlocked
  */
-int thread_mutex_unlock(thread_type tid, mutex_lock_type mylock);
+void *thread_mutex_unlock(thread_type tid, mutex_lock_type mylock);
 
 /**
  * The call does not block the calling thread; instead it returns true if the
@@ -111,7 +109,23 @@ uint64_t thread_cond_wait(thread_type tid, cond_var_type buf_not_empty, mutex_lo
  *
  * @
  */
-void thread_cond_signal(cond_var_type buf_not_empty);
+void *thread_cond_signal(cond_var_type buf_not_empty);
+
+/**
+ * This terminates the thread given by the tid.
+ *
+ * @param tid thread to terminate
+ */
+void create_mutex();
+
+
+mutex_lock_type mutex_lock_create(uint64_t *ptr_error);
+
+void mutex_lock_terminate(mutex_lock_type this, uint64_t *ptr_error);
+
+cond_var_type cond_var_create(uint64_t *ptr_error);
+
+cond_var_type cond_var_terminate(cond_var_type this, uint64_t *ptr_error);
 /*
 -----------------------------------------------
 fthread.c

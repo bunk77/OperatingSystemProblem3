@@ -4,21 +4,15 @@
 #include <stdlib.h>
 #include "fthread.h"
 
-typedef struct thread_condition *thread_condition_t;
+#define NO_ERRORS 0
+#define NULL_POINTER 1
+#define MUTEX_WAITING_QUEUE_NOT_EMPTY 2
+#define COND_WAITING_QUEUE_NOT_EMPTY 4
 
 struct mutex_lock {
     THREADQp waiting;
 };
 
-struct thread {
-    PCB_p pcb;
-
-    top_level_procedure procedure;
-    bool terminate;
-    thread_arguments args;
-    //enum state_type status;
-    THREADQp buddies;
-};
 
 struct thread_condition {
     thread_type tid;
@@ -40,32 +34,32 @@ struct cond_var {
  *
  * @return the new thread
  */
-thread_type thread_create(top_level_procedure child, thread_arguments args) {
-    thread_type this = malloc(sizeof(struct thread));
-    this->buddies = THREADQ_construct(NULL);//TODO:FIFOQ_construct
-    this->procedure = child;
-    this->args = args;
-    this->terminate = false;
-    //this->status = new;
-    this->procedure(args);
-    return this;
-    //this->args = va
-}
+//thread_type thread_create(top_level_procedure child, thread_arguments args) {
+//    thread_type this = malloc(sizeof(struct thread));
+//    this->buddies = THREADQ_construct(NULL);//TODO:FIFOQ_construct
+//    this->procedure = child;
+//    this->args = args;
+//    this->terminate = false;
+//    //this->status = new;
+//    this->procedure(args);
+//    return this;
+//    //this->args = va
+//}
 
 /**
  * This terminates the thread given by the tid.
  *
  * @param tid thread to terminate
  */
-void thread_terminate(thread_type tid) {
-    tid->terminate = true;
-    while (!THREADQ_is_empty(tid->buddies, NULL)) {//TODO:FIFOQ_size
-        thread_type buddy = THREADQ_dequeue(tid->buddies, false,
-                                            NULL);//TODO:FIFOQ_dequeue
-    }
-    THREADQ_destruct(tid->buddies, NULL);//TODO:FIFOQ_destruct
-    free(tid);
-}
+//void thread_terminate(thread_type tid) {
+//    tid->terminate = true;
+//    while (!THREADQ_is_empty(tid->buddies, NULL)) {//TODO:FIFOQ_size
+//        thread_type buddy = THREADQ_dequeue(tid->buddies, false,
+//                                            NULL);//TODO:FIFOQ_dequeue
+//    }
+//    THREADQ_destruct(tid->buddies, NULL);//TODO:FIFOQ_destruct
+//    free(tid);
+//}
 
 /**
  * When the thread returns it has mylock; the calling thread blocks if the lock
@@ -103,7 +97,7 @@ void *thread_mutex_unlock(thread_type tid, mutex_lock_type mylock)
     }
 
     return ((thread_type) THREADQ_peek(mylock->waiting,
-                                       NULL))->pcb;//TODO:FIFOQ_peek
+                                       NULL));//TODO:FIFOQ_peek
 }
 
 /**
@@ -114,7 +108,7 @@ void *thread_mutex_unlock(thread_type tid, mutex_lock_type mylock)
  */
 bool thread_mutex_trylock(thread_type tid, mutex_lock_type mylock) {
 
-    return THREADQ_peek(mylock->waiting, NULL) != tid;//TODO:FIFOQ_peek
+    return (bool) (THREADQ_peek(mylock->waiting, NULL) != tid);//TODO:FIFOQ_peek
 }
 
 /**
@@ -125,7 +119,7 @@ bool thread_mutex_trylock(thread_type tid, mutex_lock_type mylock) {
  */
 void thread_join(thread_type tid, thread_type peer_thread_id) {
     if (!peer_thread_id->terminate) {
-        THREADQ_enqueue(peer_thread_id->buddies, tid, NULL);//TODO:FIFOQ_enqueue
+        THREADQ_enqueue(peer_thread_id->buddies, tid, NULL);
     }
 }
 
@@ -143,14 +137,13 @@ void thread_join(thread_type tid, thread_type peer_thread_id) {
 uint64_t thread_cond_wait(thread_type tid, cond_var_type buf_not_empty, mutex_lock_type buflock) {
     // does tid hold buflock?
 
-    if (THREADQ_peek(buflock->waiting, NULL) == tid) {//TODO:FIFOQ_peek
+    if (THREADQ_peek(buflock->waiting, NULL) == tid) {
         thread_condition_t cond = malloc(sizeof(struct thread_condition));
 
-        cond->tid = THREADQ_dequeue(buflock->waiting, false,
-                                    NULL);//TODO:FIFOQ_dequeue
+        cond->tid = THREADQ_dequeue(buflock->waiting, false, NULL);
         cond->mutex = buflock;
 
-        THREADQ_enqueue(buf_not_empty->waiting, cond, NULL);//TODO:FIFOQ_enqueue
+        THREADQ_enqueue(buf_not_empty->waiting, cond, NULL);
         return 0;
     } else {
         return 1;
@@ -169,17 +162,17 @@ void *thread_cond_signal(cond_var_type buf_not_empty)
 {
     thread_condition_t cond = NULL;
 
-    while (!THREADQ_is_empty(buf_not_empty->waiting, NULL)) {//TODO:FIFOQ_size
+    while (!THREADQ_is_empty(buf_not_empty->waiting, NULL)) {
 
-        cond = THREADQ_dequeue(buf_not_empty->waiting, false,
-                               NULL);//TODO:FIFOQ_dequeue
+        cond = (thread_condition_t)
+            THREADQ_dequeue(buf_not_empty->waiting, false, NULL);
         free(cond);
     }
     return cond;
 
 }
 
-//todo:group->mutex[g] = create mutex function
+
 mutex_lock_type mutex_lock_create(uint64_t *ptr_error)
 {
     mutex_lock_type this = malloc(sizeof(struct mutex_lock));
@@ -188,19 +181,19 @@ mutex_lock_type mutex_lock_create(uint64_t *ptr_error)
     return this;
 }
 
-//todo:group->mutex[g] = destroy mutex (error if waiting queue is empty)
+
 void mutex_lock_terminate(mutex_lock_type this, uint64_t *ptr_error)
 {
     this->waiting = THREADQ_construct(ptr_error);
     if (THREADQ_is_empty(this->waiting, ptr_error)) {
         THREADQ_destruct(this->waiting, ptr_error);
         free(this);
-    } else {
-        // todo:add error
+    } else if (ptr_error != NULL) {
+        *ptr_error |= MUTEX_WAITING_QUEUE_NOT_EMPTY;
     }
 }
 
-//todo:group->cond[g] = destroy condition (error if waiting queue is empty)
+
 cond_var_type cond_var_create(uint64_t *ptr_error)
 {
     cond_var_type this = malloc(sizeof(struct cond_var));
@@ -209,7 +202,6 @@ cond_var_type cond_var_create(uint64_t *ptr_error)
 }
 
 
-//todo:group->cond[g] = create condition function
 cond_var_type cond_var_terminate(cond_var_type this, uint64_t *ptr_error)
 {
     this->waiting = THREADQ_construct(ptr_error);
@@ -217,6 +209,7 @@ cond_var_type cond_var_terminate(cond_var_type this, uint64_t *ptr_error)
         THREADQ_destruct(this->waiting, ptr_error);
         free(this);
     } else {
+        *ptr_error |= COND_WAITING_QUEUE_NOT_EMPTY;
         // todo:add error
     }
 }

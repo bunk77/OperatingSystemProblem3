@@ -3,7 +3,7 @@
 //
 
 #include "threadq.h"
-
+#include <stdlib.h>
 typedef struct threadq_node *threadq_node_t;
 struct threadq
 {
@@ -20,7 +20,7 @@ struct threadq
 struct threadq_node
 {
     threadq_node_t next;
-    PCB_p value;
+    thread_type value;
 };
 
 THREADQp THREADQ_construct(uint64_t *ptr_error)
@@ -45,10 +45,10 @@ void THREADQ_destruct(THREADQp this, uint64_t *ptr_error)
     free(this);
 }
 
-PCB_p THREADQ_dequeue(THREADQp this, bool requeue, uint64_t *ptr_error)
+thread_type THREADQ_dequeue(THREADQp this, bool requeue, uint64_t *ptr_error)
 {
     threadq_node_t second = this->first->next;
-    PCB_p value = this->first->value;
+    thread_type value = this->first->value;
     if (requeue) {
         *this->follow = this->first;
     } else {
@@ -60,12 +60,12 @@ PCB_p THREADQ_dequeue(THREADQp this, bool requeue, uint64_t *ptr_error)
     return value;
 }
 
-PCB_p THREADQ_peek(THREADQp this, uint64_t *ptr_error)
+thread_type THREADQ_peek(THREADQp this, uint64_t *ptr_error)
 {
-    return this->first->value;
+    return this->size == 0 ? NULL : this->first->value;
 }
 
-void THREADQ_enqueue(THREADQp this, PCB_p value, uint64_t *ptr_error)
+void THREADQ_enqueue(THREADQp this, thread_type value, uint64_t *ptr_error)
 {
     threadq_node_t new_node = malloc(sizeof(struct threadq_node));
 
@@ -75,5 +75,5 @@ void THREADQ_enqueue(THREADQp this, PCB_p value, uint64_t *ptr_error)
 
 bool THREADQ_is_empty(THREADQp this, uint64_t *ptr_error)
 {
-    return this->size == 0;
+    return (bool) (this->size == 0);
 }

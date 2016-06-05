@@ -28,14 +28,15 @@
 #include <stdarg.h>
 #include <stdbool.h>
 #include "threadq.h"
-//#include "pcb.h"
+#include "pcb.h"
 
-typedef struct thread* thread_type;
 typedef struct mutex_lock* mutex_lock_type;
 typedef struct cond_var* cond_var_type;
 
 typedef void* thread_arguments;
 typedef void* (*top_level_procedure)(thread_arguments args);
+
+typedef struct thread_condition *thread_condition_t;
 
 /**
  * This creates a new thread that starts execution in the top-level procedure,

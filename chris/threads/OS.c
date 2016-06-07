@@ -83,14 +83,14 @@ int main(void)
                 printf("\n>System exited without incident\n");
             if (OUTPUT) if (EXIT_ON_MAX_PROCESSES && exit == -2)
                 printf(
-                    "\n>%d processes have been created so system has exited\n",
+                    "\n>%ld processes have been created so system has exited\n",
                     MAX_PROCESSES);
             else if (SHUTDOWN && exit == -SHUTDOWN)
                 printf("\n>%d cycles have run so system has exited\n",
                        SHUTDOWN);
             else
                 printf(
-                    "\n>Of %d processes created, all terminable ones have terminated so system has exited\n",
+                    "\n>Of %ld processes created, all terminable ones have terminated so system has exited\n",
                     MAX_PROCESSES);
         }
 
@@ -122,7 +122,7 @@ int bootOS()
     int t;
 
     //system wide
-    srand(time(NULL)); // seed random with current time
+    srand((uint32_t) time(NULL)); // seed random with current time
     SysPointer = 0; //points at next unassigned stack item; 0 is empty
     closeable = 0;
 
@@ -167,8 +167,9 @@ int bootOS()
     idl->regs->reg.sw = ULONG_MAX;
     idl->regs->reg.term_count = 0;
     idl->regs->reg.TERMINATE = 0;
-    for (t = 0; t < IO_NUMBER * IO_CALLS; t++)
-        idl->regs->reg.IO_TRAPS[t / IO_CALLS][t % IO_CALLS] = -1;
+    for (t = 0; t < IO_NUMBER * IO_CALLS; t++) {
+        idl->regs->reg.IO_TRAPS[t / IO_CALLS][t % IO_CALLS] = ~0u;
+    }
 
 
     //queues
@@ -247,8 +248,9 @@ int mainLoopOS(int *error)
             printf("PCBs created exit = %d\n", exit);
 
         if (current == NULL || error == NULL) {
-            if (error != NULL)
+            if (error != NULL) {
                 *error += CPU_NULL_ERROR;
+            }
             exit = -1;
             printf("ERROR current process unassigned or error lost! %d",
                    *error);
@@ -330,16 +332,19 @@ int mainLoopOS(int *error)
             if (current->type > regular && current->type <= (LAST_PAIR * 2)) {
                 bool waitforbuddy = false;
                 bool reentry = false;
-                for (t = 0; t < CALL_NUMBER; t++)
+
+                for (t = 0; t < CALL_NUMBER; t++) {
                     if (*pc == current->regs->reg.CALLS[t]) {
                         word call = current->regs->reg.CODES[t] &
                                     -2; //truncates 1's place
                         word resource =
                             current->regs->reg.CODES[t] & 1; //1's place
+                        uint64_t longerror = OS_NO_ERROR;
                         switch (call) {
                             case CODE_LOCK:
                                 if (thread_mutex_lock(current,
-                                                      group[current->group]->fmutex[resource]))
+                                                      group[current->group]->fmutex[resource],
+                                                      &longerror))
                                     waitforbuddy = true;
                                 break;
                             case CODE_UNLOCK:
@@ -350,7 +355,8 @@ int mainLoopOS(int *error)
                                 if (group[current->group]->flag[resource]) { //flag is true
                                     thread_cond_wait(current,
                                                      group[current->group]->fcond[resource],
-                                                     group[current->group]->fmutex[resource]);
+                                                     group[current->group]->fmutex[resource],
+                                                     &longerror);
                                     waitforbuddy = true;
                                 }
                                 break;
@@ -358,7 +364,8 @@ int mainLoopOS(int *error)
                                 if (!group[current->group]->flag[resource]) {//flag is false
                                     thread_cond_wait(current,
                                                      group[current->group]->fcond[resource],
-                                                     group[current->group]->fmutex[resource]);
+                                                     group[current->group]->fmutex[resource],
+                                                     &longerror);
                                     waitforbuddy = true;
                                 }
                                 break;
@@ -376,8 +383,11 @@ int mainLoopOS(int *error)
                                     (bool) !(group[current->group]->flag[resource]);
                                 break;
                         }
+                        error += (int) longerror;
                         break;
                     }
+
+                }
                 if (waitforbuddy || reentry) {
                     sysStackPush(CPU->regs, error);
                     if (waitforbuddy)
@@ -646,13 +656,15 @@ void trap_mutexhandler(const int t, int *error)
 
 void trap_requehandler(const int t, int *error)
 {
-    PCB_p pcb;
+    PCB_p pcb = NULL;
+    uint64_t longerror;
     if (t < 0) {
-        thread_mutex_unlock(current, group[current->group]->fmutex[t]);
+        thread_mutex_unlock(current, group[current->group]->fmutex[-t],
+                            &longerror);
     } else {
-        thread_cond_signal(group[current->group]->fcond[t]);
+        thread_cond_signal(group[current->group]->fcond[t], &longerror);
     }
-
+    longerror += longerror;
     if (pcb != NULL) {
         pcb->state = ready;
         pcb->lastClock = clock_; //to track starvation
@@ -687,6 +699,10 @@ void interrupt(const int INTERRUPT, void *args, int *error)
         case INTERRUPT_IOCOMPLETE:
             isr_iocomplete(((int) args), error);
             break;
+
+        default:
+            *error += OS_UNKOWN_INTERRUPT_ERROR;
+
     }
 }
 
@@ -807,41 +823,46 @@ void scheduler(int *error)
                PCB_toString(readyQ[r]->head->data, rdqstr, error));
     }
     //if it's a timer interrupt
-    if (!pcb_idl && !pcb_term && !pcb_io &&
-        !pcb_mtx) { //todo:add stuff about locks and conds
+    if (!pcb_idl && !pcb_term && !pcb_io && !pcb_mtx) {
+        //todo:add stuff about locks and conds
         current->state = ready;
         current->lastClock = clock_;
         if (current->promoted) {
             current->attentionCount++;
         }
         FIFOq_enqueuePCB(readyQ[current->priority], current, error);
-    } else
+    } else {
         idl->state = waiting;
+    }
     dispatcher(error);
 
     if (OUTPUT) {
         char runstr[PCB_TOSTRING_LEN];
         printf(">Now running:     %s\n", PCB_toString(current, runstr, error));
         char rdqstr[PCB_TOSTRING_LEN];
-        if (!pcb_idl && !pcb_term && !pcb_io) if (readyQ[r]->size > 1)
-            printf(">Requeued readyQ: %s\n",
-                   PCB_toString(readyQ[r]->tail->data, rdqstr, error));
-        else
-            printf(">No process return required.\n");
-        else if (pcb_idl)
+        if (!pcb_idl && !pcb_term && !pcb_io) {
+            if (readyQ[r]->size > 1) {
+                printf(">Requeued readyQ: %s\n",
+                       PCB_toString(readyQ[r]->tail->data, rdqstr, error));
+            } else {
+                printf(">No process return required.\n");
+            }
+        } else if (pcb_idl) {
             printf(">Idle process:    %s\n", PCB_toString(idl, rdqstr, error));
-        else if (pcb_term)
+        } else if (pcb_term) {
             printf(">Exited system:   %s\n",
                    PCB_toString(terminateQ->tail->data, rdqstr, error));
-        else if (pcb_io)
+        } else if (pcb_io) {
             printf(">Requested I/O:   %s\n", PCB_toString(pcb, rdqstr, error));
-        else if (pcb_mtx)
+        } else if (pcb_mtx) {
             printf(">Mutex lock/wait: %s\n", PCB_toString(pcb, rdqstr, error));
+        }
         int stz = FIFOQ_TOSTRING_MAX;
         char str[stz];
-        if (OUTPUT)
+        if (OUTPUT) {
             printf(">Priority %d %s\n", r,
                    FIFOq_toString(readyQ[r], str, &stz, error));
+        }
 
     }
 

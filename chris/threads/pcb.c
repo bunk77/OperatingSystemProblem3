@@ -12,38 +12,28 @@ char *STATE[] = {"created", "ready", "running", "waiting", "interrupted",
 char *TYPE[] = {"regular", "producer", "mutual_A", "consumer", "mutual_B",
                 "undefined"};
 
-word CODE_TYPE[(LAST_PAIR * 2) + 1][CALL_NUMBER] = {{0, 0,          0, 0, 0, 0},
+word CODE_TYPE[(LAST_PAIR * 2) + 1][CALL_NUMBER] = {
+    {0, 0,          0, 0, 0,                         0},
     /* producer */
-                                                    {CODE_LOCK +
-                                                     0,             CODE_WAIT_F +
-                                                                    0,
-                                                                       CODE_WRITE +
-                                                                       0,    CODE_FLAG +
-                                                                             0,
-                                                        CODE_SIGNAL + 0,
-                                                        CODE_UNLOCK + 0},
+    {CODE_LOCK + 0, CODE_WAIT_F + 0, CODE_WRITE + 0, CODE_FLAG + 0,
+                                                                     CODE_SIGNAL +
+                                                                     0,
+        CODE_UNLOCK + 0},
     /* consumer */
-                                                    {CODE_LOCK +
-                                                     0,             CODE_WAIT_T +
-                                                                    0, CODE_READ +
-                                                                       0,    CODE_FLAG +
-                                                                             0,
-                                                        CODE_SIGNAL + 0,
-                                                        CODE_UNLOCK + 0},
+    {CODE_LOCK + 0, CODE_WAIT_T + 0, CODE_READ + 0,  CODE_FLAG +
+                                                     0,              CODE_SIGNAL +
+                                                                     0,
+        CODE_UNLOCK + 0},
     /* mutual_a */
-                                                    {CODE_LOCK + 0, CODE_LOCK +
-                                                                    1, CODE_WRITE +
-                                                                       0,    CODE_WRITE +
-                                                                             1,
-                                                        CODE_UNLOCK + 1,
-                                                        CODE_UNLOCK + 0},
+    {CODE_LOCK + 0, CODE_LOCK + 1,   CODE_WRITE + 0, CODE_WRITE +
+                                                     1,              CODE_UNLOCK +
+                                                                     1,
+        CODE_UNLOCK + 0},
     /* mutual_b */
-                                                    {CODE_LOCK + 1, CODE_LOCK +
-                                                                    0, CODE_WRITE +
-                                                                       0,    CODE_WRITE +
-                                                                             1,
-                                                        CODE_UNLOCK + 0,
-                                                        CODE_UNLOCK + 1},
+    {CODE_LOCK + 1, CODE_LOCK + 0,   CODE_WRITE + 0, CODE_WRITE +
+                                                     1,              CODE_UNLOCK +
+                                                                     0,
+        CODE_UNLOCK + 1}
 };
 
 
@@ -68,6 +58,7 @@ static bool mutual = false;
 PCB_p PCB_construct_init(int *ptr_error)
 {
     PCB_p pcb = PCB_construct(ptr_error);
+    sprintf(pcb->ispcb, "pcb");
     *ptr_error += PCB_init(pcb);
     return pcb;
 }
@@ -111,11 +102,10 @@ int PCB_destruct(PCB_p this)
     int error = (this == NULL) *
                 PCB_NULL_ERROR; // sets error code to 1 if `this` is NULL
     this->terminate = true;
-    while (!THREADQ_is_empty(this->buddies, NULL)) {//TODO:FIFOQ_size
-        thread_type buddy = THREADQ_dequeue(this->buddies, false,
-                                            NULL);//TODO:FIFOQ_dequeue
+    while (!THREADQ_is_empty(this->buddies, NULL)) {
+        thread_type buddy = THREADQ_dequeue(this->buddies, NULL);
     }
-    THREADQ_destruct(this->buddies, NULL);//TODO:FIFOQ_destruct
+    THREADQ_destruct(this->buddies, NULL);
 
     if (!error) {
         if (this->regs != NULL)
@@ -136,7 +126,7 @@ int PCB_init(PCB_p this)
     static word pidCounter = 0;
     static int firstCall = 1;
     if (!firstCall) {
-        srand(time(NULL) << 1);
+        srand((uint32_t) time(NULL) << 1);
         firstCall = 0;
     }
     int error = (this == NULL) * PCB_NULL_ERROR;

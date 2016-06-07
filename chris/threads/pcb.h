@@ -122,6 +122,7 @@ struct PCB
     bool promoted;
     THREADQp buddies;
     bool terminate;
+    char ispcb[10];
 };
 
 union regfile

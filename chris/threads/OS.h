@@ -66,7 +66,7 @@
 #define STACK_ERROR_DEFAULT 0
 #define CPU_NULL_ERROR 71
 #define CPU_STACK_ERROR 73
-
+#define OS_UNKOWN_INTERRUPT_ERROR 79
 
 //note on style: ALLCAPS_lowercase is either a MUTEX_ variable or the data
 //               protected by the MUTEX_

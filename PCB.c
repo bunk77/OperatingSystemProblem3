@@ -7,25 +7,45 @@
 #include "PCB.h"
 
 //struct and error defines originally here
-char *STATE[] = {"created", "ready", "running", "waiting", "interrupted", "blocked", "terminated", "nostate"};
-char *TYPE[] = {"regular", "producer", "mutual_A", "consumer", "mutual_B", "undefined"};
+char *STATE[] = {"created", "ready", "running", "waiting", "interrupted",
+                 "blocked", "terminated", "nostate"};
+char *TYPE[] = {"regular", "producer", "mutual_A", "consumer", "mutual_B",
+                "undefined"};
 
-word CODE_TYPE[(LAST_PAIR*2)+1][CALL_NUMBER] = { {0,0,0,0,0,0},
-    /* producer */ { CODE_LOCK+0, CODE_WAIT_F+0, CODE_WRITE+0, CODE_FLAG+0, CODE_SIGNAL+0, CODE_UNLOCK+0 },
-    /* consumer */ { CODE_LOCK+0, CODE_WAIT_T+0, CODE_READ+0, CODE_FLAG+0, CODE_SIGNAL+0, CODE_UNLOCK+0 },
-    /* mutual_a */ { CODE_LOCK+0, CODE_LOCK+1, CODE_WRITE+0, CODE_WRITE+1, CODE_UNLOCK+1, CODE_UNLOCK+0 },
-    /* mutual_b */ { CODE_LOCK+1, CODE_LOCK+0, CODE_WRITE+0, CODE_WRITE+1, CODE_UNLOCK+0, CODE_UNLOCK+1 },
+word CODE_TYPE[(LAST_PAIR * 2) + 1][CALL_NUMBER] = {
+    {0, 0,          0, 0, 0,                         0},
+    /* producer */
+    {CODE_LOCK + 0, CODE_WAIT_F + 0, CODE_WRITE + 0, CODE_FLAG + 0,
+                                                                     CODE_SIGNAL +
+                                                                     0,
+        CODE_UNLOCK + 0},
+    /* consumer */
+    {CODE_LOCK + 0, CODE_WAIT_T + 0, CODE_READ + 0,  CODE_FLAG +
+                                                     0,              CODE_SIGNAL +
+                                                                     0,
+        CODE_UNLOCK + 0},
+    /* mutual_a */
+    {CODE_LOCK + 0, CODE_LOCK + 1,   CODE_WRITE + 0, CODE_WRITE +
+                                                     1,              CODE_UNLOCK +
+                                                                     1,
+        CODE_UNLOCK + 0},
+    /* mutual_b */
+    {CODE_LOCK + 1, CODE_LOCK + 0,   CODE_WRITE + 0, CODE_WRITE +
+                                                     1,              CODE_UNLOCK +
+                                                                     0,
+        CODE_UNLOCK + 1}
 };
 
 
 static int PRIORITIES[] = {PRIORITY_0_CHANCE, PRIORITY_1_CHANCE,
                            PRIORITY_2_CHANCE, PRIORITY_3_CHANCE,
                            PRIORITY_OTHER_CHANCE};
-static int MAX_TYPES[]  = {CPU_ONLY_MAX+IO_ONLY_MAX, PROCON_PAIR_MAX, MUTUAL_PAIR_MAX};
+static int MAX_TYPES[] = {CPU_ONLY_MAX + IO_ONLY_MAX, PROCON_PAIR_MAX,
+                          MUTUAL_PAIR_MAX};
 static int MAX_IOCPU[] = {CPU_ONLY_MAX, IO_ONLY_MAX};
 
-static int type_count[] = {0,0,0,0,0};
-static int io_count[] = {0,0};
+static int type_count[] = {0, 0, 0, 0, 0};
+static int io_count[] = {0, 0};
 
 static bool procon = false;
 static bool mutual = false;
@@ -35,8 +55,10 @@ static bool mutual = false;
  * @param ptr_error
  * @return 
  */
-PCB_p PCB_construct_init(int *ptr_error) {
+PCB_p PCB_construct_init(int *ptr_error)
+{
     PCB_p pcb = PCB_construct(ptr_error);
+    sprintf(pcb->ispcb, "pcb");
     *ptr_error += PCB_init(pcb);
     return pcb;
 }
@@ -46,11 +68,13 @@ PCB_p PCB_construct_init(int *ptr_error) {
  * 
  * @return a pointer to a new PCB object
  */
-PCB_p PCB_construct(int *ptr_error) {
-    PCB_p this = (PCB_p) malloc(sizeof (struct PCB));
-    this->regs = (REG_p) malloc(sizeof (union regfile));
+PCB_p PCB_construct(int *ptr_error)
+{
+    PCB_p this = (PCB_p) malloc(sizeof(struct PCB));
+    this->regs = (REG_p) malloc(sizeof(union regfile));
     int error = ((!this) * PCB_INIT_ERROR);
     int r;
+    this->buddies = THREADQ_construct(NULL);
     this->pid = -1;
     this->io = false;
     this->type = undefined;
@@ -58,6 +82,7 @@ PCB_p PCB_construct(int *ptr_error) {
     this->state = nostate;
     this->timeCreate = -1;
     this->timeTerminate = DEFAULT_TIME_TERMINATE;
+    this->terminate = false;
     this->lastClock = -1;
     this->group = 0;
     for (r = 0; r < REGNUM; r++)
@@ -72,8 +97,16 @@ PCB_p PCB_construct(int *ptr_error) {
  * Deallocates pcb from the heap.
  * @param this
  */
-int PCB_destruct(PCB_p this) {
-    int error = (this == NULL) * PCB_NULL_ERROR; // sets error code to 1 if `this` is NULL
+int PCB_destruct(PCB_p this)
+{
+    int error = (this == NULL) *
+                PCB_NULL_ERROR; // sets error code to 1 if `this` is NULL
+    this->terminate = true;
+    while (!THREADQ_is_empty(this->buddies, NULL)) {
+        thread_type buddy = THREADQ_dequeue(this->buddies, NULL);
+    }
+    THREADQ_destruct(this->buddies, NULL);
+
     if (!error) {
         if (this->regs != NULL)
             free(this->regs);
@@ -88,11 +121,12 @@ int PCB_destruct(PCB_p this) {
  * @param this
  * @return 
  */
-int PCB_init(PCB_p this) {
+int PCB_init(PCB_p this)
+{
     static word pidCounter = 0;
     static int firstCall = 1;
     if (!firstCall) {
-        srand(time(NULL) << 1);
+        srand((uint32_t) time(NULL) << 1);
         firstCall = 0;
     }
     int error = (this == NULL) * PCB_NULL_ERROR;
@@ -104,28 +138,35 @@ int PCB_init(PCB_p this) {
         this->attentionCount = 0;
         this->promoted = false;
         //IO and type determination
-        int type_chance[LAST_PAIR+1];
+        int type_chance[LAST_PAIR + 1];
         percent = 0;
         for (type = LAST_PAIR; type >= regular; type--) {
             type_chance[type] = (MAX_TYPES[type] != type_count[type]);
-            if (type_chance[type]) percent++;
+            if (type_chance[type])
+                percent++;
         }
         
-        if (PCB_DEBUG) printf("\t\tPER R: %d  P: %d   M: %d\n", type_chance[0], type_chance[1], type_chance[2]);
- 
+        if (PCB_DEBUG)
+            printf("\t\tPER R: %d  P: %d   M: %d\n", type_chance[0],
+                   type_chance[1], type_chance[2]);
+
         
-        if (PCB_DEBUG) printf("\t\tpercent: %d\n", percent);
+        if (PCB_DEBUG)
+            printf("\t\tpercent: %d\n", percent);
         if (percent || procon || mutual) {
             if (procon || mutual) {
-                this->type = (procon? consumer : mutual_B);
-                if (PCB_DEBUG) printf("\t\tkilled it %s\n", TYPE[this->type]);
+                this->type = (procon ? consumer : mutual_B);
+                if (PCB_DEBUG)
+                    printf("\t\tkilled it %s\n", TYPE[this->type]);
             }
             else {
                 for (type = LAST_PAIR; type >= regular; type--)
                     type_chance[type] *= 100 / percent;
                 type_chance[regular] *= 1.5;
                 
-                if (PCB_DEBUG) printf("\t\tCHA R: %d  P: %d   M: %d\n", type_chance[0], type_chance[1], type_chance[2]);
+                if (PCB_DEBUG)
+                    printf("\t\tCHA R: %d  P: %d   M: %d\n", type_chance[0],
+                           type_chance[1], type_chance[2]);
                 
                 chance = rand() % 100;
                 percent = 0;
@@ -138,24 +179,36 @@ int PCB_init(PCB_p this) {
                 }
             }
             
-            if (this->type == regular && ( (MAX_IOCPU[0] == io_count[0]) || (MAX_IOCPU[1] == io_count[1]) )) {
-                    this->io = (MAX_IOCPU[0] == io_count[0]);
-                    if (PCB_DEBUG) printf("\t\treg max detected io now %d\n", this->io);
+            if (this->type == regular && ((MAX_IOCPU[0] == io_count[0]) ||
+                                          (MAX_IOCPU[1] == io_count[1]))) {
+                this->io = (MAX_IOCPU[0] == io_count[0]);
+                if (PCB_DEBUG)
+                    printf("\t\treg max detected io now %d\n", this->io);
             }
-            else this->io = rand() % 2;
+            else
+                this->io = rand() % 2;
 
             procon = (type == producer);
             mutual = (type == mutual_A);
-            if (PCB_DEBUG &&(procon || mutual)) printf("\t\twe got a live one %s\n", TYPE[this->type]);
+            if (PCB_DEBUG && (procon || mutual))
+                printf("\t\twe got a live one %s\n", TYPE[this->type]);
 
             type_count[this->type]++;
             io_count[this->io] += (type == regular);
 
         }
         
-        if (PCB_DEBUG) printf("\t\tCUR R: %d {C: %d   I:%d}   P: %d   A: %d   C: %d   B: %d\n", type_count[0],  io_count[0],  io_count[1], type_count[1], type_count[2], type_count[3], type_count[4]);
-        if (PCB_DEBUG) printf("\t\tMAX R: %d {C: %d   I:%d}   P: %d   A: %d   C: %d   B: %d\n",  MAX_TYPES[0], MAX_IOCPU[0], MAX_IOCPU[1],  MAX_TYPES[1],  MAX_TYPES[2],  MAX_TYPES[1],  MAX_TYPES[2]);
- 
+        if (PCB_DEBUG)
+            printf(
+                "\t\tCUR R: %d {C: %d   I:%d}   P: %d   A: %d   C: %d   B: %d\n",
+                type_count[0], io_count[0], io_count[1], type_count[1],
+                type_count[2], type_count[3], type_count[4]);
+        if (PCB_DEBUG)
+            printf(
+                "\t\tMAX R: %d {C: %d   I:%d}   P: %d   A: %d   C: %d   B: %d\n",
+                MAX_TYPES[0], MAX_IOCPU[0], MAX_IOCPU[1], MAX_TYPES[1],
+                MAX_TYPES[2], MAX_TYPES[1], MAX_TYPES[2]);
+
         
         //Priority determination
         chance = rand() % 100;
@@ -169,13 +222,14 @@ int PCB_init(PCB_p this) {
             }
             //printf("\npid: %lu chance: %d percent %d priority: %d\n", this->pid, chance, percent, priority);
         }
-        if (this->priority < 0) error += PCB_PRIORITY_ERROR;
+        if (this->priority < 0)
+            error += PCB_PRIORITY_ERROR;
         this->state = DEFAULT_STATE;
         //this->timeCreate = 0;
         this->timeTerminate = DEFAULT_TIME_TERMINATE;
         REG_init(this->regs, &error);
         int c;
-        if (this->type != regular && this->type <= LAST_PAIR*2)
+        if (this->type != regular && this->type <= LAST_PAIR * 2)
             for (c = 0; c < CALL_NUMBER; c++)
                 this->regs->reg.CODES[c] = CODE_TYPE[this->type][c];
         
@@ -183,13 +237,15 @@ int PCB_init(PCB_p this) {
     return error;
 }
 
-int PCBs_available() {
-    int type_chance[LAST_PAIR+1];
+int PCBs_available()
+{
+    int type_chance[LAST_PAIR + 1];
     int type;
     int available = 0;
     for (type = LAST_PAIR; type >= regular; type--) {
         type_chance[type] = (MAX_TYPES[type] != type_count[type]);
-        if (type_chance[type]) available++;
+        if (type_chance[type])
+            available++;
     }
     return available + procon + mutual;
 }
@@ -200,7 +256,8 @@ int PCBs_available() {
  * @param ptr_error
  * @return 
  */
-REG_p REG_init(REG_p this, int *ptr_error) {
+REG_p REG_init(REG_p this, int *ptr_error)
+{
     if (this == NULL)
         *ptr_error += PCB_NULL_ERROR;
     else {
@@ -208,21 +265,29 @@ REG_p REG_init(REG_p this, int *ptr_error) {
         int j;
         int thread_step;
         this->reg.pc = DEFAULT_PC;
-        this->reg.MAX_PC = rand() % (MAX_PC_RANGE + 1 - MAX_PC_MIN) + MAX_PC_MIN;
+        this->reg.MAX_PC =
+            rand() % (MAX_PC_RANGE + 1 - MAX_PC_MIN) + MAX_PC_MIN;
         this->reg.sw = DEFAULT_SW;
         this->reg.term_count = 0; //set to 0 for infinite process
-        this->reg.TERMINATE = ((int)(rand() % 100 >= TERM_INFINITE_CHANCE)) * (rand() % TERM_RANGE + 1);
+        this->reg.TERMINATE = ((int) (rand() % 100 >= TERM_INFINITE_CHANCE)) *
+                              (rand() % TERM_RANGE + 1);
         for (t = 0; t < IO_NUMBER * IO_CALLS; t++)
-            this->reg.IO_TRAPS[(int) (t / IO_CALLS)][t % IO_CALLS] = MIN_IO_CALL + (rand() % (this->reg.MAX_PC - MIN_IO_CALL));
+            this->reg.IO_TRAPS[(int) (t / IO_CALLS)][t % IO_CALLS] =
+                MIN_IO_CALL + (rand() % (this->reg.MAX_PC - MIN_IO_CALL));
         for (t = 0; t < IO_NUMBER * IO_CALLS; t++)
-            if (!(this->reg.IO_TRAPS[(int) (t / IO_CALLS)][t % IO_CALLS] % THREAD_CALL))
-                this->reg.IO_TRAPS[(int) (t / IO_CALLS)][t % IO_CALLS] = -1; //dup
+            if (!(this->reg.IO_TRAPS[(int) (t / IO_CALLS)][t % IO_CALLS] %
+                  THREAD_CALL))
+                this->reg.IO_TRAPS[(int) (t / IO_CALLS)][t %
+                                                         IO_CALLS] = -1; //dup
             else
                 for (j = 0; j < t; j++)
-                    if (this->reg.IO_TRAPS[(int) (j / IO_CALLS)][j % IO_CALLS] == 
+                    if (this->reg.IO_TRAPS[(int) (j / IO_CALLS)][j %
+                                                                 IO_CALLS] ==
                         this->reg.IO_TRAPS[(int) (t / IO_CALLS)][t % IO_CALLS])
-                        this->reg.IO_TRAPS[(int) (j / IO_CALLS)][j % IO_CALLS] = -1; //duplicate values erased
-        thread_step = THREAD_CALL * (int) (((this->reg.MAX_PC - MIN_THREAD_CALL) / CALL_NUMBER) / THREAD_CALL);
+                        this->reg.IO_TRAPS[(int) (j / IO_CALLS)][j %
+                                                                 IO_CALLS] = -1; //duplicate values erased
+        thread_step = THREAD_CALL * (int) (
+            ((this->reg.MAX_PC - MIN_THREAD_CALL) / CALL_NUMBER) / THREAD_CALL);
         for (t = 0; t < CALL_NUMBER; t++) {
             this->reg.CALLS[t] = MIN_THREAD_CALL + t * thread_step;
             this->reg.CODES[t] = 0;
@@ -238,7 +303,8 @@ REG_p REG_init(REG_p this, int *ptr_error) {
  * @param pid the new pid value
  * @return 
  */
-int PCB_setPid(PCB_p this, word pid) {
+int PCB_setPid(PCB_p this, word pid)
+{
     // verify pid does not already exist
     int error = (this == NULL) * PCB_NULL_ERROR;
     if (!error) {
@@ -253,7 +319,8 @@ int PCB_setPid(PCB_p this, word pid) {
  * @param this
  * @return the pid of the process
  */
-word PCB_getPid(PCB_p this, int *ptr_error) {
+word PCB_getPid(PCB_p this, int *ptr_error)
+{
     int error = (this == NULL) * PCB_NULL_ERROR;
 
     if (ptr_error != NULL) {
@@ -270,7 +337,8 @@ word PCB_getPid(PCB_p this, int *ptr_error) {
  * @param state the new state value
  * @return error 
  */
-int PCB_setState(PCB_p this, enum state_type state) {
+int PCB_setState(PCB_p this, enum state_type state)
+{
     int error = 0;
     if (this == NULL) {
         error |= PCB_NULL_ERROR;
@@ -283,9 +351,18 @@ int PCB_setState(PCB_p this, enum state_type state) {
         if (state == terminated) {
             type_count[this->type]--;
             io_count[this->io] -= (this->type == regular);
-            if (PCB_DEBUG) printf("\t\tprocess terminated, freed up slot:\n");
-            if (PCB_DEBUG) printf("\t\tCUR R: %d {C: %d   I:%d}   P: %d   A: %d   C: %d   B: %d\n", type_count[0],  io_count[0],  io_count[1], type_count[1], type_count[2], type_count[3], type_count[4]);
-            if (PCB_DEBUG) printf("\t\tMAX R: %d {C: %d   I:%d}   P: %d   A: %d   C: %d   B: %d\n",  MAX_TYPES[0], MAX_IOCPU[0], MAX_IOCPU[1],  MAX_TYPES[1],  MAX_TYPES[2],  MAX_TYPES[1],  MAX_TYPES[2]);
+            if (PCB_DEBUG)
+                printf("\t\tprocess terminated, freed up slot:\n");
+            if (PCB_DEBUG)
+                printf(
+                    "\t\tCUR R: %d {C: %d   I:%d}   P: %d   A: %d   C: %d   B: %d\n",
+                    type_count[0], io_count[0], io_count[1], type_count[1],
+                    type_count[2], type_count[3], type_count[4]);
+            if (PCB_DEBUG)
+                printf(
+                    "\t\tMAX R: %d {C: %d   I:%d}   P: %d   A: %d   C: %d   B: %d\n",
+                    MAX_TYPES[0], MAX_IOCPU[0], MAX_IOCPU[1], MAX_TYPES[1],
+                    MAX_TYPES[2], MAX_TYPES[1], MAX_TYPES[2]);
         }
     }
     return error;
@@ -297,7 +374,8 @@ int PCB_setState(PCB_p this, enum state_type state) {
  * @param this
  * @return the state of the process
  */
-enum state_type PCB_getState(PCB_p this, int *ptr_error) {
+enum state_type PCB_getState(PCB_p this, int *ptr_error)
+{
     int error = (this == NULL) * PCB_NULL_ERROR;
 
     if (ptr_error != NULL) {
@@ -314,7 +392,8 @@ enum state_type PCB_getState(PCB_p this, int *ptr_error) {
  * @param pid the new pid value
  * @return 
  */
-int PCB_setPriority(PCB_p this, unsigned short priority) {
+int PCB_setPriority(PCB_p this, unsigned short priority)
+{
     int error = 0;
     if (this == NULL) {
         error |= PCB_NULL_ERROR;
@@ -334,7 +413,8 @@ int PCB_setPriority(PCB_p this, unsigned short priority) {
  * @param this
  * @return the pid of the process
  */
-unsigned short PCB_getPriority(PCB_p this, int *ptr_error) {
+unsigned short PCB_getPriority(PCB_p this, int *ptr_error)
+{
     int error = (this == NULL) * PCB_NULL_ERROR;
 
     if (ptr_error != NULL) {
@@ -350,7 +430,8 @@ unsigned short PCB_getPriority(PCB_p this, int *ptr_error) {
  * @param pid the new pid value
  * @return 
  */
-int PCB_setPc(PCB_p this, word pc) {
+int PCB_setPc(PCB_p this, word pc)
+{
     int error = (this == NULL) * PCB_NULL_ERROR;
     if (!error) {
         this->regs->reg.pc = pc;
@@ -364,7 +445,8 @@ int PCB_setPc(PCB_p this, word pc) {
  * @param this
  * @return the address where the program will resume
  */
-word PCB_getPc(PCB_p this, int *ptr_error) {
+word PCB_getPc(PCB_p this, int *ptr_error)
+{
     int error = (this == NULL) * PCB_NULL_ERROR;
 
     if (ptr_error != NULL) {
@@ -380,7 +462,8 @@ word PCB_getPc(PCB_p this, int *ptr_error) {
  * @param pid the new pid value
  * @return 
  */
-int PCB_setSw(PCB_p this, word sw) {
+int PCB_setSw(PCB_p this, word sw)
+{
     int error = (this == NULL) * PCB_NULL_ERROR;
     if (!error) {
         this->regs->reg.sw = sw;
@@ -394,7 +477,8 @@ int PCB_setSw(PCB_p this, word sw) {
  * @param this
  * @return the address where the program will resume
  */
-word PCB_getSw(PCB_p this, int *ptr_error) {
+word PCB_getSw(PCB_p this, int *ptr_error)
+{
     int error = (this == NULL) * PCB_NULL_ERROR;
     if (ptr_error != NULL) {
         *ptr_error += error;
@@ -410,24 +494,31 @@ word PCB_getSw(PCB_p this, int *ptr_error) {
  * @param int
  * @return string representing the contents of the pc.
  */
-char * PCB_toString(PCB_p this, char *str, int *ptr_error) {
+char *PCB_toString(PCB_p this, char *str, int *ptr_error)
+{
     int error = (this == NULL || str == NULL) * PCB_NULL_ERROR;
     if (!error) {
         str[0] = '\0';
         char regString[PCB_TOSTRING_LEN - 1];
 
         if (this->timeTerminate == DEFAULT_TIME_TERMINATE) {
-            const char * format = "PID: 0x%04lx  PC: 0x%05lx  State: %s  Priority: 0x%x  Intensity: %s  Type: %s  Group: %lu   %s TimeCreate: %lu";
-            snprintf(str, (size_t) PCB_TOSTRING_LEN - 1, format, this->pid, this->regs->reg.pc, 
-                    STATE[this->state], this->orig_priority, this->io? "IO" : "CPU", TYPE[this->type], this->group,
-                    Reg_File_toString(this->regs, regString, ptr_error), this->timeCreate);
+            const char *format = "PID: 0x%04lx  PC: 0x%05lx  State: %s  Priority: 0x%x  Intensity: %s  Type: %s  Group: %lu   %s TimeCreate: %lu";
+            snprintf(str, (size_t) PCB_TOSTRING_LEN - 1, format, this->pid,
+                     this->regs->reg.pc,
+                     STATE[this->state], this->orig_priority,
+                     this->io ? "IO" : "CPU", TYPE[this->type], this->group,
+                     Reg_File_toString(this->regs, regString, ptr_error),
+                     this->timeCreate);
 
 
         } else {
-            const char * format = "PID: 0x%04lx  PC: 0x%05lx  State: %s  Priority: 0x%x  Intensity: %s  Type: %s  Group: %lu   %s TimeCreate: %lu TimeTerminate: %lu";
-            snprintf(str, (size_t) PCB_TOSTRING_LEN - 1, format, this->pid, this->regs->reg.pc, 
-                    STATE[this->state], this->orig_priority, this->io? "IO" : "CPU", TYPE[this->type],  this->group,
-                    Reg_File_toString(this->regs, regString, ptr_error), this->timeCreate, this->timeTerminate);
+            const char *format = "PID: 0x%04lx  PC: 0x%05lx  State: %s  Priority: 0x%x  Intensity: %s  Type: %s  Group: %lu   %s TimeCreate: %lu TimeTerminate: %lu";
+            snprintf(str, (size_t) PCB_TOSTRING_LEN - 1, format, this->pid,
+                     this->regs->reg.pc,
+                     STATE[this->state], this->orig_priority,
+                     this->io ? "IO" : "CPU", TYPE[this->type], this->group,
+                     Reg_File_toString(this->regs, regString, ptr_error),
+                     this->timeCreate, this->timeTerminate);
 
         }
 
@@ -448,17 +539,18 @@ char * PCB_toString(PCB_p this, char *str, int *ptr_error) {
  * @param int
  * @return string representing the contents of the regfile.
  */
-char * Reg_File_toString(REG_p this, char *str, int *ptr_error) {
+char *Reg_File_toString(REG_p this, char *str, int *ptr_error)
+{
     int error = (this == NULL || str == NULL) * PCB_NULL_ERROR;
     if (!error) {
         str[0] = '\0';
-        const char * format = "MaxPC: 0x%05lx  Rollover: 0x%05lx  Terminate: 0x%05lx";
-        snprintf(str, (size_t) PCB_TOSTRING_LEN - 1, format, this->reg.MAX_PC, 
-                this->reg.term_count, this->reg.TERMINATE);
+        const char *format = "MaxPC: 0x%05lx  Rollover: 0x%05lx  Terminate: 0x%05lx";
+        snprintf(str, (size_t) PCB_TOSTRING_LEN - 1, format, this->reg.MAX_PC,
+                 this->reg.term_count, this->reg.TERMINATE);
     }
 
     if (ptr_error != NULL) {
         *ptr_error += error;
     }
     return str;
-}    
+}

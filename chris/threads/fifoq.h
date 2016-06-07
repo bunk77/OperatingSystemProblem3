@@ -1,21 +1,86 @@
-//
-// Created by chris on 5/15/2016.
-//
-#ifndef THREADS_FIFOQ_H
-#define THREADS_FIFOQ_H
+/*
+ * Problem 3 - Discontinuities
+ * TCSS 422 A Spring 2016
+ * Bun Kak, Chris Ottersen, Mark Peters, Paul Zander
+ */
 
-#include "linked_list.h"
-#include "list.h"
+#ifndef FIFOQ_H
+#define FIFOQ_H
 
-typedef struct fifoq *FIFOQp;
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "PCB.h"
 
-FIFOQp FIFOQ_construct(element_interface_t *interface);
-void  FIFOQ_enqueue(FIFOQp this, void* item);
-void* FIFOQ_dequeue(FIFOQp this);
-void* FIFOQ_peek(FIFOQp this);
+#define this this_
+#define FIFO_NULL_ERROR 431
+#define FIFO_CONSTRUCT_ERROR 433
+#define FIFO_STRING_ERROR 439
 
-void  FIFOQ_destruct(FIFOQp this);
-uint64_t FIFOQ_size(FIFOQp this);
+#define NODE_NULL_ERROR 401
+#define NODE_CONSTRUCT_ERROR 409
+#define NODE_STRING_ERROR 419
+#define NODE_DATA_ERROR 421
+
+#define FIFOQ_TOSTRING_MAX (PCB_TOSTRING_LEN * 100)
+
+typedef struct FIFOq *FIFOq_p;
+typedef struct Node_type Node;
+typedef Node *Node_p;
+
+struct FIFOq
+{
+    int size;
+    Node_p head;
+    Node_p tail;
+};
+
+struct Node_type
+{
+    int pos;
+    PCB_p data;
+    Node_p next_node;
+};
+
+FIFOq_p FIFOq_construct(int *);
+
+void FIFOq_destruct(FIFOq_p,
+                    int *);              // deallocates pcb from the heap
+int FIFOq_init(FIFOq_p,
+               int *);              // sets default values for member data
+int FIFOq_is_empty(FIFOq_p, int *);
+
+void FIFOq_enqueue(FIFOq_p, Node_p, int *);
+
+void FIFOq_enqueuePCB(FIFOq_p, PCB_p, int *);
+
+PCB_p FIFOq_dequeue(FIFOq_p, int *);
+
+char *FIFOq_toString(FIFOq_p, char *, int *,
+                     int *); // returns a string representing the contents of the pcb
+
+Node_p Node_construct(PCB_p data, Node_p next, int *ptr_error);
+
+int Node_init(Node_p this, PCB_p, Node_p, int *);
+
+int Node_destruct(Node_p this);
+
+PCB_p Node_getData(Node_p this, int *ptr_error);
+
+int Node_setData(Node_p this, PCB_p data);
+
+Node_p Node_getNext(Node_p this, int *ptr_error);
+
+int Node_setNext(Node_p this, Node_p next);
+
+char *Node_toString(Node_p this, char *str, int *ptr_error);
+
+Node_p FIFOq_remove_and_return_next(Node_p curr, Node_p prev, FIFOq_p list);
+
+int is_null(void *this, int *ptr_error);
+
+int FIFOq_test_main(int argc, char **argv);
+
+#endif /* FIFOQ_H */
 
 
-#endif //THREADS_FIFOQ_H

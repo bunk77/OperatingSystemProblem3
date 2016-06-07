@@ -1,29 +1,38 @@
 things to do:
 
-Mark
-	createQ thread
-
-Bun
-	communication of PCB and fthread, scheduler; new print statements
+everyone, please get all your coding done by Saturday night.
+I need to make sure everything runs smoothly and the project is complete
+if you don't have your code in by Saturday night I'll consider your contribution AWOL
+I only have a short time to piece everything together and bugfix
 
 Chris
-	fthread.c; fthread.h
+	fthread.c; fthread.h; integrate into OS.c and test to make sure it runs right
 
 Daniel
-        understand system; OS.c: add starvation check for loop
+	resource deadlock monitor with tests; or commented out functional code by Sat night if Chris hasn't uploaded fthread integration yet
+
+Bun
+	fthreads, deadlock monitor help; tune-up/comment; help Chris integrate fthreads
+
+Mark
+	make non-deadlock version; tune-up/comment
+
+Bruno
+	tune-up/comment
 
 C pocket reference cuz there's a cow on the front
 
-5+ threads running:
+4 actual pthreads running:
 	CPU
 	Timer
 	I/O 1
 	I/O 2
-	CreatePCBs thread
 
 todo:
     comment everything
-    add timeCreate, timeTerminate to pcb printout
+    integrate fthreads
+    integrate resource deadlock monitor
+    tune-up, bugfix
     simulate timer interrupt in isr, traps that aren't timer related
 	simulate interrupt hierarchy?
 

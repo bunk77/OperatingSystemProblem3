@@ -3,10 +3,6 @@ things to do:
 Mark
 	createQ thread
 
-Bruno
-	PCB.c; PCB.h;OS.c: 
-    FINISHED: timeCreate/Terminate to PCB printout; starvation check for loop
-
 Bun
 	communication of PCB and fthread, scheduler; new print statements
 

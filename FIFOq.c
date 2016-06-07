@@ -14,9 +14,11 @@ static PCB_p null;
  * 
  * returns you a boring empty FIFO queue
  */
-FIFOq_p FIFOq_construct(int *error) {
+FIFOq_p FIFOq_construct(int *error)
+{
     FIFOq_p this = (FIFOq_p) malloc(sizeof(struct FIFOq));
-    int init_error = ((!this) * FIFO_CONSTRUCT_ERROR) || FIFOq_init(this, error);
+    int init_error =
+        ((!this) * FIFO_CONSTRUCT_ERROR) || FIFOq_init(this, error);
     if (init_error && !is_null(this, error)) {
         FIFOq_destruct(this, error);
     }
@@ -28,7 +30,8 @@ FIFOq_p FIFOq_construct(int *error) {
  * this is the FIFO queue no more
  * error is the error pointer
  */
-void FIFOq_destruct(FIFOq_p this, int *error) {
+void FIFOq_destruct(FIFOq_p this, int *error)
+{
     if (!is_null(this, error)) {
         Node_p node = this->head;
         while (this->head != NULL) {
@@ -49,7 +52,8 @@ void FIFOq_destruct(FIFOq_p this, int *error) {
  * 
  * returns an error int
  */
-int FIFOq_init(FIFOq_p this, int *error) {
+int FIFOq_init(FIFOq_p this, int *error)
+{
     if (!is_null(this, error)) {
         this->size = 0;
         this->head = NULL;
@@ -64,11 +68,19 @@ int FIFOq_init(FIFOq_p this, int *error) {
  * 
  * returns the error as a plain boring int
  */
-int FIFOq_is_empty(FIFOq_p this, int *error) {
+int FIFOq_is_empty(FIFOq_p this, int *error)
+{
     if (!is_null(this, error)) {
         return this->size > 0 ? 0 : 1;
     }
     return error == NULL ? 0 : *error;
+}
+
+PCB_p FIFOq_peek(FIFOq_p this, int *error)
+{
+    if (FIFOq_is_empty(this, error))
+        return NULL;
+    return this->head->data;
 }
 
 /* Enqueues the given node to the end (tail) of the queue, unless the queue is
@@ -80,7 +92,8 @@ int FIFOq_is_empty(FIFOq_p this, int *error) {
  *   
  * returns nothing because too bad
  */
-void FIFOq_enqueue(FIFOq_p this, Node_p next, int *error) {
+void FIFOq_enqueue(FIFOq_p this, Node_p next, int *error)
+{
     if (!is_null(this, error) && !is_null(next, error)) {
 
         // an enqueued PCB is in the ready state
@@ -103,7 +116,8 @@ void FIFOq_enqueue(FIFOq_p this, Node_p next, int *error) {
     }
 }
 
-void FIFOq_enqueuePCB(FIFOq_p this, PCB_p pcb, int* error) {
+void FIFOq_enqueuePCB(FIFOq_p this, PCB_p pcb, int *error)
+{
     FIFOq_enqueue(this, Node_construct(pcb, NULL, error), error);
 }
 
@@ -116,7 +130,8 @@ void FIFOq_enqueuePCB(FIFOq_p this, PCB_p pcb, int* error) {
  * Oq_p 
  * returns the pcb pointer that was the head
  */
-PCB_p FIFOq_dequeue(FIFOq_p this, int *error) {
+PCB_p FIFOq_dequeue(FIFOq_p this, int *error)
+{
     if (!is_null(this, error) && !is_null(this->head, error)) {
         Node_p node = this->head;
         this->head = this->head->next_node;
@@ -146,15 +161,17 @@ PCB_p FIFOq_dequeue(FIFOq_p this, int *error) {
  * 
  * return a version of the toString as a null-terminated char pointer
  */
-char * FIFOq_toString(FIFOq_p this, char *str, int *stz, int *error) {
+char *FIFOq_toString(FIFOq_p this, char *str, int *stz, int *error)
+{
     int usedChars = 0;
     if (!is_null(this, error) && !is_null(str, error)) {
         char pcbstr[PCB_TOSTRING_LEN];
-                                                    // ">I/O %d added:     %s\n"
+        // ">I/O %d added:     %s\n"
         usedChars += snprintf(str, *stz - usedChars, "Head:");
         if (this->head != NULL) {
             Node_p node = this->head;
-            usedChars += snprintf(str + strlen(str), *stz - usedChars, " %s\n-", PCB_toString(node->data, pcbstr, error));
+            usedChars += snprintf(str + strlen(str), *stz - usedChars, " %s\n-",
+                                  PCB_toString(node->data, pcbstr, error));
             node = node->next_node;
             int newline = 1;
             while (node != NULL) {
@@ -162,15 +179,18 @@ char * FIFOq_toString(FIFOq_p this, char *str, int *stz, int *error) {
                 word pid = PCB_getPid(pcb, error);
                 //alternate P1->P2-* scheme
 //                usedChars += snprintf(str + strlen(str), *stz - usedChars, "%cP%lu-", node == this->head? ' ' : '>', pid, PCB_toString);
-                usedChars += snprintf(str + strlen(str), *stz - usedChars, "> PID: 0x%04lx%c-", pid, (newline++ % 5) ? ' ' : '\n');
+                usedChars += snprintf(str + strlen(str), *stz - usedChars,
+                                      "> PID: 0x%04lx%c-", pid,
+                                      (newline++ % 5) ? ' ' : '\n');
                 node = node->next_node;
             }
-            usedChars += snprintf(str + strlen(str), *stz - usedChars, "* (Queue Count = %d)", this->size);
+            usedChars += snprintf(str + strlen(str), *stz - usedChars,
+                                  "* (Queue Count = %d)", this->size);
         }
         *stz = *stz - usedChars;
         return str;
     } else {
-      return 0;
+        return 0;
     }
 }
 
@@ -183,7 +203,8 @@ char * FIFOq_toString(FIFOq_p this, char *str, int *stz, int *error) {
  * 
  * returns the node, duh
  */
-Node_p Node_construct (PCB_p data, Node_p next_node, int *error) {
+Node_p Node_construct(PCB_p data, Node_p next_node, int *error)
+{
     Node_p this = (Node_p) malloc(sizeof(struct Node_type));
     int init_error = ((!this) * NODE_CONSTRUCT_ERROR) ||
                      Node_init(this, data, next_node, error);
@@ -203,7 +224,8 @@ Node_p Node_construct (PCB_p data, Node_p next_node, int *error) {
  * 
  * returns an error integer
  */
-int Node_init (Node_p this, PCB_p data, Node_p next_node, int *error) {
+int Node_init(Node_p this, PCB_p data, Node_p next_node, int *error)
+{
     int init_error = (this == NULL) * NODE_NULL_ERROR;
     if (error != NULL)
         *error += init_error;
@@ -221,13 +243,14 @@ int Node_init (Node_p this, PCB_p data, Node_p next_node, int *error) {
  * 
  * return an integer error pointer
  */
-int Node_destruct (Node_p this) {
-  int error = (this == NULL) * NODE_NULL_ERROR;
-  if (!error) {
+int Node_destruct(Node_p this)
+{
+    int error = (this == NULL) * NODE_NULL_ERROR;
+    if (!error) {
     free(this);
-    this = NULL;
-  }
-  return error;
+        this = NULL;
+    }
+    return error;
 }
 
 /* Gets the data (pcb) of the node and returns it.
@@ -237,12 +260,13 @@ int Node_destruct (Node_p this) {
  * 
  * return the data (pcb) that the given node was pointing to
  */
-PCB_p Node_getData (Node_p this, int * ptr_error) {
-  int error = this == NULL;
-  if (ptr_error != NULL) {
-    *ptr_error = error;
-  }
-  return error ? NULL : this->data;
+PCB_p Node_getData(Node_p this, int *ptr_error)
+{
+    int error = this == NULL;
+    if (ptr_error != NULL) {
+        *ptr_error = error;
+    }
+    return error ? NULL : this->data;
 }
 
 /* Sets the node's data (pcb), overwriting any prior data.
@@ -252,12 +276,13 @@ PCB_p Node_getData (Node_p this, int * ptr_error) {
  * 
  * returns the error integer
  */
-int Node_setData (Node_p this, PCB_p data) {
-  int error = (this == NULL) * NODE_NULL_ERROR;
-  if (!error) {
-    this->data = data;
-  }
-  return error;
+int Node_setData(Node_p this, PCB_p data)
+{
+    int error = (this == NULL) * NODE_NULL_ERROR;
+    if (!error) {
+        this->data = data;
+    }
+    return error;
 }
 
 /* Returns the next node of the given one.
@@ -267,12 +292,13 @@ int Node_setData (Node_p this, PCB_p data) {
  * 
  * returns a pointer to the next node
  */
-Node_p Node_getNext (Node_p this, int * ptr_error) {
-  int error = (this == NULL) * NODE_NULL_ERROR;
-  if (ptr_error != NULL) {
-    *ptr_error += error;
-  }
-  return error ? NULL : this->next_node;
+Node_p Node_getNext(Node_p this, int *ptr_error)
+{
+    int error = (this == NULL) * NODE_NULL_ERROR;
+    if (ptr_error != NULL) {
+        *ptr_error += error;
+    }
+    return error ? NULL : this->next_node;
 }
 
 /* Sets the next node with the given one.
@@ -282,12 +308,13 @@ Node_p Node_getNext (Node_p this, int * ptr_error) {
  * 
  * return an integer representing the error state
  */
-int Node_setNext (Node_p this, Node_p next_node) {
-  int error = (this == NULL) * NODE_NULL_ERROR;
-  if (!error) {
-    this->next_node = next_node;
-  }
-  return error;
+int Node_setNext(Node_p this, Node_p next_node)
+{
+    int error = (this == NULL) * NODE_NULL_ERROR;
+    if (!error) {
+        this->next_node = next_node;
+    }
+    return error;
 }
 
 /* Returns a string describing the node. Not used anymore as PCB's toString
@@ -299,20 +326,21 @@ int Node_setNext (Node_p this, Node_p next_node) {
  * 
  * returns the tostring
  */
-char * Node_toString (Node_p this, char *str, int *ptr_error) {
-  int error = ((this == NULL) * NODE_NULL_ERROR |
-    (NODE_STRING_ERROR * (str == NULL)) |
-    (NODE_DATA_ERROR * (this->data == NULL)));
-  
-  if (ptr_error != NULL) {
-    *ptr_error += error;
-  }
+char *Node_toString(Node_p this, char *str, int *ptr_error)
+{
+    int error = ((this == NULL) * NODE_NULL_ERROR |
+                 (NODE_STRING_ERROR * (str == NULL)) |
+                 (NODE_DATA_ERROR * (this->data == NULL)));
 
-  if (!error) {
-    snprintf(str, 10, "P%lx", PCB_getPid(this->data, NULL));
-  }
-  
-  return str;
+    if (ptr_error != NULL) {
+        *ptr_error += error;
+    }
+
+    if (!error) {
+        snprintf(str, 10, "P%lx", PCB_getPid(this->data, NULL));
+    }
+
+    return str;
 }
 
 /* Checks if the given reference is null and updates error pointer if so.
@@ -324,7 +352,8 @@ char * Node_toString (Node_p this, char *str, int *ptr_error) {
  * 
  * returns the error as an int as well for boolean tests
  */
-int is_null(void *this, int *ptr_error) {
+int is_null(void *this, int *ptr_error)
+{
     int error = (this == NULL) * FIFO_NULL_ERROR;
     if (ptr_error != NULL) {
         *ptr_error = error + *ptr_error;
@@ -333,7 +362,8 @@ int is_null(void *this, int *ptr_error) {
 }
 
 
-Node_p FIFOq_remove_and_return_next(Node_p curr, Node_p prev, FIFOq_p list) {
+Node_p FIFOq_remove_and_return_next(Node_p curr, Node_p prev, FIFOq_p list)
+{
     if (curr == prev && curr == list->head) { // remove head
         list->head = curr->next_node;//removes curr
         curr->next_node = NULL;
@@ -345,7 +375,7 @@ Node_p FIFOq_remove_and_return_next(Node_p curr, Node_p prev, FIFOq_p list) {
     } else if (prev->next_node == curr) {
         prev->next_node = curr->next_node;
         curr->next_node = NULL;
-        if(list->tail == curr) {
+        if (list->tail == curr) {
             list->tail = prev;
         }
         list->size--;

@@ -26,6 +26,7 @@
 #define THREAD_DEBUG false
 #define STACK_DEBUG false
 #define CREATEPCB_DEBUG false
+#define MUTEX_DEBUG false
 #define EXIT_STATUS_MESSAGE true
 #define OUTPUT true
 #define OUTPUT_CONTEXT_SWITCH 1
@@ -53,7 +54,7 @@
 #define INTERRUPT_IOCOMPLETE 4444
 
 //SYSTEM DETAILS
-#define SHUTDOWN 100000
+#define SHUTDOWN 300000
 #define TIME_QUANTUM 300
 #define TIMER_SLEEP (TIME_QUANTUM * 1000)
 #define IO_MAX_SLEEP (TIME_QUANTUM * 2000)
@@ -66,24 +67,28 @@
 #define STACK_ERROR_DEFAULT 0
 #define CPU_NULL_ERROR 71
 #define CPU_STACK_ERROR 73
+#define OS_UNKOWN_INTERRUPT_ERROR 79
 
 
 //note on style: ALLCAPS_lowercase is either a MUTEX_ variable or the data
 //               protected by the MUTEX_
 
-struct CPU {
-  REG_p regs;
+struct CPU
+{
+    REG_p regs;
 };
 
-struct shared_resource {
+struct shared_resource
+{
     int members;
-    //fmutex[MUTUAL_MAX_RESOURCES];
-    //fcond[MUTUAL_MAX_RESOURCES];
     bool flag[MUTUAL_MAX_RESOURCES];
     word resource[MUTUAL_MAX_RESOURCES];
+    FIFOq_p fmutex[MUTUAL_MAX_RESOURCES];
+    FIFOq_p fcond[MUTUAL_MAX_RESOURCES];
 };
 
-struct io_thread_type {
+struct io_thread_type
+{
     thread THREAD_io;
     mutex MUTEX_io;
     cond COND_io;
@@ -92,8 +97,8 @@ struct io_thread_type {
     FIFOq_p waitingQ;
 };
 
-typedef struct io_thread_type* io_thread;
-typedef struct shared_resource* PCB_r;
+typedef struct io_thread_type *io_thread;
+typedef struct shared_resource *PCB_r;
 
 //extern word SsyStack[SYSSIZE];
 //extern int SysPointer;
@@ -112,14 +117,13 @@ void     isr_iocomplete  (const int IO, int* error);
 void     scheduler       (int* error);
 void     dispatcher      (int* error);
 int      createPCBs  	 (int *error); 
-void     mutexPair       (PCB_r, int* error);
+PCB_r    mutexPair       (int* error);
 void     mutexEmpty      (PCB_r, int* error);
 void      sysStackPush    (REG_p, int* error);
 void      sysStackPop     (REG_p, int* error);
 void     cleanup         (int* error);
 void     queueCleanup    (FIFOq_p, char*, int* error);
 void     stackCleanup    ();
-void     mutexCleanup    (PCB_r, int* error);
 void     nanosleeptest   ();
 void awakeStarvationDaemon(int* error); 
 

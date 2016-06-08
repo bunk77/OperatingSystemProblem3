@@ -14,6 +14,7 @@
 static word SysStack[SYSSIZE];
 static int SysPointer;
 static int closeable;
+static int junk;
 
 /*timer fields*/
 static thread THREAD_timer;
@@ -332,6 +333,7 @@ int mainLoopOS(int *error)
                                 break;
                             case CODE_UNLOCK:
                                 reentry = true;
+                                resource += 1;
                                 resource *= -1;
                                 break;
                             case CODE_WAIT_T:
@@ -343,6 +345,7 @@ int mainLoopOS(int *error)
                                     reentry = true;
                                     waitforbuddy = true;
                                     current->resource = resource;
+                                    resource += 1;
                                     resource *= -1;
                                     if (OUTPUT || MUTEX_DEBUG)
                                         printf(">Cond %02lu-%d wait:     %s\n", current->group, resource,
@@ -358,6 +361,7 @@ int mainLoopOS(int *error)
                                     reentry = true;
                                     waitforbuddy = true;
                                     current->resource = resource;
+                                    resource += 1;
                                     resource *= -1;
                                     if (OUTPUT || MUTEX_DEBUG)
                                         printf(">Cond %02lu-%d wait:     %s\n", current->group, resource,
@@ -690,6 +694,7 @@ void trap_terminate(int *error)
         if (group[current->group]->members == 0) {
             PCB_r pair = group[current->group];
             group[current->group] = empty;
+            junk = current->group;
             mutexEmpty(pair, error);
         }
     }
@@ -720,7 +725,7 @@ void trap_iohandler(const int t, int *error)
 void trap_mutexhandler(const int T, int *error)
 {
     int t = T;
-    if (t<0) t = -t;
+    if (t<0) t = -t - 1;
     sysStackPop(current->regs, error);
     current->state = blocked;
     char pcbstr[PCB_TOSTRING_LEN];
@@ -740,9 +745,9 @@ void trap_requehandler(const int T, int *error)
     bool newlock = false;
     char pcbstr[PCB_TOSTRING_LEN];
     PCB_p pcb = NULL;
-    
+    printf("t: %d\n", t);
     if (t < 0) {
-        t = -t;
+        t = -t - 1;
         
         //current = thread_mutex_unlock(current, group[current->group]->fmutex[t]);
         if (FIFOq_peek(group[current->group]->fmutex[t], error) != NULL)
@@ -1229,17 +1234,26 @@ PCB_r mutexPair(int *error)
 
 void mutexEmpty(PCB_r pair, int *error)
 {
+
     if (pair != empty && pair != NULL) {
         int r; //deallocate pair members such as mutex, conds, in loop
         for (r = 0; r < MUTUAL_MAX_RESOURCES; r++) {
+                char mQ[24] = "group_yy mutexQ_x";
+                mQ[6] = (junk/10) + '0';
+                mQ[7] = (junk%10) + '0';
+                mQ[16] = r + '0';
             if (!FIFOq_is_empty(pair->fmutex[r], NULL)) {
-                queueCleanup(pair->fmutex[r], "oops", error);
+                queueCleanup(pair->fmutex[r], mQ, error);
                               *error += PCB_RESOURCE_ERROR;
             } else
                 FIFOq_destruct(pair->fmutex[r], error);
 //            mutex_lock_terminate(pair->fmutex[r], NULL);
+            char cQ[24] = "group_yy condQ_x";
+            cQ[6] = (junk/10) + '0';
+            cQ[7] = (junk%10) + '0';
+            cQ[15] = r + '0';
             if (!FIFOq_is_empty(pair->fcond[r], NULL)) {
-                queueCleanup(pair->fcond[r], "oops", error);
+                queueCleanup(pair->fcond[r], cQ, error);
                 *error += PCB_RESOURCE_ERROR;
             } else
                 FIFOq_destruct(pair->fcond[r], error);

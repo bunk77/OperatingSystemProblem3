@@ -103,6 +103,8 @@ typedef struct shared_resource *PCB_r;
 
 int bootOS();
 
+void  monitoringDeadlock(int *error);
+
 int mainLoopOS(int *error);
 
 void *timer(void *);

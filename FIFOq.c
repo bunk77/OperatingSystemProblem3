@@ -1,7 +1,7 @@
 /*
- * Problem 3 - Discontinuities
+ * Final Project - Operating System
  * TCSS 422 A Spring 2016
- * Bun Kak, Chris Ottersen, Mark Peters, Paul Zander
+ * Mark Peters, Luis Solis-Bruno, Chris Ottersen
  */
 
 #include "FIFOq.h"
@@ -72,12 +72,16 @@ int FIFOq_is_empty(FIFOq_p this, int *error)
 {
     if (!is_null(this, error)) {
         return this->size > 0 ? 0 : 1;
-    }
+    }  else *error += 100000;
     return error == NULL ? 0 : *error;
 }
 
 PCB_p FIFOq_peek(FIFOq_p this, int *error)
 {
+    if (this == NULL) {
+        *error += 800000000;
+        printf("You fucked it up\n");
+    }
     if (FIFOq_is_empty(this, error))
         return NULL;
     return this->head->data;

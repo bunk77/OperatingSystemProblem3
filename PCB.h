@@ -1,7 +1,7 @@
 /*
- * Problem 3 - Discontinuities
+ * Final Project - Operating System
  * TCSS 422 A Spring 2016
- * Bun Kak, Chris Ottersen, Mark Peters, Paul Zander
+ * Mark Peters, Luis Solis-Bruno, Chris Ottersen
  */
 
 #ifndef PCB_H

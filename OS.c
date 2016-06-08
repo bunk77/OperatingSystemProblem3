@@ -1,7 +1,7 @@
 /*
- * Problem 3 - Discontinuities
+ * Final Project - Operating System
  * TCSS 422 A Spring 2016
- * Bun Kak, Chris Ottersen, Mark Peters, Paul Zander
+ * Mark Peters, Luis Solis-Bruno, Chris Ottersen
  */
 
 #include "OS.h"
@@ -291,18 +291,19 @@ int mainLoopOS(int *error)
                 bool waitforbuddy = false;
                 bool reentry = false;
                 bool showit = false;
+                int resource;
                 for (t = 0; t < CALL_NUMBER; t++)
                     if (*pc == current->regs->reg.CALLS[t]) {
                         showit = true;
                         word call = current->regs->reg.CODES[t] & -2; //truncates 1's place
-                        word resource = current->regs->reg.CODES[t] & 1; //1's place
+                        resource = current->regs->reg.CODES[t] & 1; //1's place
                         char curstr[PCB_TOSTRING_LEN];
                         char pcbstr[PCB_TOSTRING_LEN];
-                        printf("call: %lu   resource: %lu   pc: %lu\n", call, resource, (*pc));
+                        printf("call: %lu   resource: %d   pc: %lu\n", call, resource, (*pc));
                         switch (call) {
                             case CODE_LOCK:
                                 if (OUTPUT || MUTEX_DEBUG)
-                                    printf(">Lock %02lu-%lu request:  %s\n", current->group, resource,
+                                    printf(">Lock %02lu-%d request:  %s\n", current->group, resource,
                                             PCB_toString(current, curstr, error));
                                 bool lock = false;
                                 if (FIFOq_peek(group[current->group]->fmutex[resource], error) == current)
@@ -331,7 +332,7 @@ int mainLoopOS(int *error)
                                 break;
                             case CODE_UNLOCK:
                                 reentry = true;
-                                t *= -1;
+                                resource *= -1;
                                 break;
                             case CODE_WAIT_T:
                                 if (group[current->group]->flag[resource]) { //flag is true
@@ -342,9 +343,9 @@ int mainLoopOS(int *error)
                                     reentry = true;
                                     waitforbuddy = true;
                                     current->resource = resource;
-                                    t *= -1;
+                                    resource *= -1;
                                     if (OUTPUT || MUTEX_DEBUG)
-                                        printf(">Cond %02lu-%lu wait:     %s\n", current->group, resource,
+                                        printf(">Cond %02lu-%d wait:     %s\n", current->group, resource,
                                                 PCB_toString(current, curstr, error));
                                 }
                                 break;
@@ -357,9 +358,9 @@ int mainLoopOS(int *error)
                                     reentry = true;
                                     waitforbuddy = true;
                                     current->resource = resource;
-                                    t *= -1;
+                                    resource *= -1;
                                     if (OUTPUT || MUTEX_DEBUG)
-                                        printf(">Cond %02lu-%lu wait:     %s\n", current->group, resource,
+                                        printf(">Cond %02lu-%d wait:     %s\n", current->group, resource,
                                                 PCB_toString(current, curstr, error));
                                 }
                                 break;
@@ -369,19 +370,19 @@ int mainLoopOS(int *error)
                             case CODE_READ:
                                 (*sw) = group[current->group]->resource[resource];
                                 if (OUTPUT || MUTEX_DEBUG)
-                                    printf(">Shared %02lu-%lu read:   %s\n", current->group, resource,
+                                    printf(">Shared %02lu-%d read:   %s\n", current->group, resource,
                                         PCB_toString(current, curstr, error));
                                 break;
                             case CODE_WRITE:
                                 (group[current->group]->resource[resource])++;
                                 if (OUTPUT || MUTEX_DEBUG)
-                                    printf(">Shared %02lu-%lu write:  %s\n", current->group, resource,
+                                    printf(">Shared %02lu-%d write:  %s\n", current->group, resource,
                                         PCB_toString(current, curstr, error));
                                 break;
                             case CODE_FLAG:
                                 group[current->group]->flag[resource] ^= true;
                                 if (OUTPUT || MUTEX_DEBUG)
-                                    printf(">Flag %02lu-%lu switched: %s\n", current->group, resource,
+                                    printf(">Flag %02lu-%d switched: %s\n", current->group, resource,
                                         PCB_toString(current, curstr, error));
                                 break;
                             default:
@@ -408,13 +409,13 @@ int mainLoopOS(int *error)
                 if (waitforbuddy || reentry) {
                     if (reentry) {
                         sysStackPush(CPU->regs, error);
-                        trap_requehandler(t, error);
+                        trap_requehandler(resource, error);
                         sysStackPop(CPU->regs, error);
                     }
                     if (waitforbuddy) {
                         (*pc)++;
                         sysStackPush(CPU->regs, error);
-                        trap_mutexhandler(t, error);
+                        trap_mutexhandler(resource, error);
                         sysStackPop(CPU->regs, error);
                         continue;
                     }
@@ -738,10 +739,11 @@ void trap_requehandler(const int T, int *error)
     int t = T;
     bool newlock = false;
     char pcbstr[PCB_TOSTRING_LEN];
-    PCB_p pcb;
+    PCB_p pcb = NULL;
     
     if (t < 0) {
         t = -t;
+        
         //current = thread_mutex_unlock(current, group[current->group]->fmutex[t]);
         if (FIFOq_peek(group[current->group]->fmutex[t], error) != NULL)
             FIFOq_dequeue(group[current->group]->fmutex[t], error);
@@ -1237,6 +1239,7 @@ void mutexEmpty(PCB_r pair, int *error)
                 FIFOq_destruct(pair->fmutex[r], error);
 //            mutex_lock_terminate(pair->fmutex[r], NULL);
             if (!FIFOq_is_empty(pair->fcond[r], NULL)) {
+                queueCleanup(pair->fcond[r], "oops", error);
                 *error += PCB_RESOURCE_ERROR;
             } else
                 FIFOq_destruct(pair->fcond[r], error);

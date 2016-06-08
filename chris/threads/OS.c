@@ -113,6 +113,68 @@ int main(void)
 
 }
 
+
+// this is the the code for detecting deadlock.
+// Cna you check if the logic make sense
+// Since, we don't have code for mutex i could not test if it works.
+// if you find any error or adjustments, that i should make plz tell me.
+
+void  monitoringDeadlock(int *error){
+    if (DEBUG) puts("***************************************************************************");
+    if (DEBUG) puts("Monitoring Deadlock");
+    int i;
+    int isDeadLock = 0;
+    printf("Type :  %d\n", current->type);
+    for(i = 0; i < MAX_SHARED_RESOURCES; i++) {
+        printf("DeadLock Monitoring %d\n", group[i]->members);
+        Node_p ownR1 = group[i]->fmutex[0]->->waiting->head->next_node; // get the frist waiting Q
+        Node_p ownR2 = group[i]->fmutex[1]->->waiting->head->next_node; // get the frist waiting Q
+        if(ownR1 != NULL || ownR2 != NULL){
+            if(ownR1->data->type == mutual_A && ownR2->data->type == mutual_A){ // check if R1 type-> mutual_A R2 type-> mutual_A
+                //Set up to not have Deadlock								    // R1 waiting for R2 give and R2 waiting for R2
+                if (DEBUG) puts("DeadLock on Mutual_A");
+                if (DEBUG) printf("DeadLock detected for process PID %d and PID %d\n",PCB_getPid(ownR1->data,error),
+
+                            //Set up to might occur Deadlock
+                                  printf("DeadLock on Mutual_A\n"));
+                printf("DeadLock detected for process PID %d and PID %d\n",PCB_getPid(ownR1->data,error),
+                       PCB_getPid(ownR2->data,error));
+                isDeadLock++;
+                //dead lock
+                // need to check others?
+            }
+            else if(ownR1->data->type == mutual_B && ownR2->data->type == mutual_B){ // check if R1 type-> mutual_A R2 type-> mutual_A
+                //Set up to not have Deadlock 										 // R1 waiting for R2 give and R2 waiting for R2
+                if (DEBUG) puts("DeadLock on Mutual_B");
+                if (DEBUG) printf("DeadLock detected for process PID %d and PID %d\n",PCB_getPid(ownR1->data,error),
+                                  PCB_getPid(ownR2->data,error));
+
+                //Set up to might occur Deadlock ()
+                printf("DeadLock on Mutual_B\n");
+                printf("DeadLock detected for process PID %d and PID %d\n",PCB_getPid(ownR1->data,error),
+                       PCB_getPid(ownR2->data,error));
+
+                isDeadLock++;
+                //dead lock
+                // need to check others?
+            }
+                //set up to might occur Deadlock
+            else{
+                printf("No Deadlock Detected\n");
+            }
+        }
+        else {
+            printf("group[%d] waitting List is empty", i); // if waittingQ is empty
+        }
+    }
+    if(isDeadLock >= 0){
+        if (EXIT_STATUS_MESSAGE) printf("No DeadLock");
+    }
+    if (DEBUG) puts("***************************************************************************");
+}
+
+
+
 //initializes values and returns error
 
 int bootOS()
